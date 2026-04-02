@@ -19,11 +19,7 @@ module.exports = {
       repo: "git@github.com:Guihal/ozon.git",
       path: "/var/www/ozon",
 
-      "post-deploy": `
-  export PATH=$HOME/.bun/bin:$PATH &&
-  bun install &&
-  pm2 reload ecosystem.config.js --env production
-`,
+      "post-deploy": `export PATH=$HOME/.bun/bin:$PATH && bun install && pm2 reload ecosystem.config.js --env production`,
     },
   },
 };
