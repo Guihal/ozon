@@ -1,8 +1,11 @@
 import Elysia, { t } from "elysia";
 import { checkDeliveryAvailability } from "../../services/ozon-logistics/delivery";
-import { mapToTildaPickupPoint } from "../../services/ozon-logistics/mapper";
 import { getDeliveryPrice } from "../../services/ozon-logistics/checkout";
-import { loadPointsInfo } from "../../services/pickup-points-cache";
+import {
+  getTildaPickupPoints,
+  getAllTildaPickupPoints,
+  getCacheStatus,
+} from "../../services/pickup-points-cache";
 import { appendFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 
@@ -49,36 +52,53 @@ export const delivery = new Elysia({ prefix: "/v1" })
     },
     { body: t.Any() },
   )
-  .get("/delivery/pvz", async () => {
-    try {
-      console.log("🔄 Получение кэша ПВЗ в формате Tilda...");
+  .get(
+    "/delivery/pvz",
+    ({ query }) => {
+      try {
+        const { q, limit, offset } = query;
 
-      const cacheData = loadPointsInfo();
-      if (!cacheData || !cacheData.points) {
-        console.warn("⚠️  Кэш ПВЗ не найден");
+        const result = getTildaPickupPoints({
+          q: q || undefined,
+          limit: limit || 500,
+          offset: offset || 0,
+        });
+
         return {
-          success: false,
-          error: "Кэш точек самовывоза не инициализирован",
-          pvz: [],
+          success: true,
+          ...result,
         };
+      } catch (error) {
+        console.error("❌ Ошибка в endpoint /delivery/pvz:", error);
+        throw error;
       }
-
-      // Преобразуем все точки в формат Tilda
-      const tildaPoints = cacheData.points
-        .map((point) => mapToTildaPickupPoint(point))
-        .filter((point) => point !== null);
-
-      console.log(`✅ Отправлено ${tildaPoints.length} точек в формате Tilda`);
-
+    },
+    {
+      query: t.Object({
+        q: t.Optional(t.String()),
+        limit: t.Optional(t.Number({ maximum: 5000 })),
+        offset: t.Optional(t.Number()),
+      }),
+    },
+  )
+  .get("/delivery/pvz/all", () => {
+    try {
+      const pvz = getAllTildaPickupPoints();
       return {
         success: true,
-        count: tildaPoints.length,
-        pvz: tildaPoints,
+        count: pvz.length,
+        pvz,
       };
     } catch (error) {
-      console.error("❌ Ошибка в endpoint /delivery/pvz:", error);
+      console.error("❌ Ошибка в endpoint /delivery/pvz/all:", error);
       throw error;
     }
+  })
+  .get("/delivery/pvz/status", () => {
+    return {
+      success: true,
+      ...getCacheStatus(),
+    };
   })
   .post(
     "/delivery/price",

@@ -1,130 +1,108 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join } from "path";
 import {
   getPickupPointsList,
   getPickupPointsInfo,
 } from "./ozon-logistics/delivery";
 import { ozonConfig } from "../config/env";
+import { db } from "../db";
 import type {
   PickupPointItem,
   PickupPointInfoItem,
+  TildaPickupPoint,
 } from "./ozon-logistics/types";
 
-// Пути к файлам кэша
-const CACHE_DIR = join(__dirname, "..", "cache");
-const POINTS_LIST_FILE = join(CACHE_DIR, "pickup-points-list.json");
-const POINTS_INFO_FILE = join(CACHE_DIR, "pickup-points-info.json");
-
 // Настройки обновления
-const UPDATE_HOUR = 14; // Обновление в 14:00 (вторая половина дня)
+const UPDATE_HOUR = 14; // Обновление в 14:00
 const BATCH_SIZE = 100; // Размер пачки для запросов
 
 // Таймер для ежедневного обновления
 let dailyUpdateTimer: NodeJS.Timeout | null = null;
 
-/**
- * Создаёт директорию для кэша, если не существует
- */
-function ensureCacheDir(): void {
-  if (!existsSync(CACHE_DIR)) {
-    mkdirSync(CACHE_DIR, { recursive: true });
-    console.log("📁 Создана директория кэша:", CACHE_DIR);
-  }
+// Подготавливаем запросы один раз
+const insertStmt = db.prepare(`
+  INSERT OR REPLACE INTO pickup_points (
+    map_point_id, enabled, name, address, city, region, street, house,
+    description, lat, long, location_id, delivery_type_id, delivery_type_name,
+    fitting_rooms_count, pvz_rating, storage_period, working_hours, properties, images
+  ) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?
+  )
+`);
+
+const countStmt = db.prepare("SELECT COUNT(*) as count FROM pickup_points");
+const lastUpdateStmt = db.prepare(
+  "SELECT MAX(updated_at) as last_update FROM pickup_points",
+);
+
+// Тип для строки из БД
+interface PickupPointRow {
+  map_point_id: number;
+  enabled: number;
+  name: string;
+  address: string;
+  city: string;
+  region: string;
+  street: string;
+  house: string;
+  description: string;
+  lat: number;
+  long: number;
+  location_id: string;
+  delivery_type_id: number;
+  delivery_type_name: string;
+  fitting_rooms_count: number;
+  pvz_rating: number;
+  storage_period: number;
+  working_hours: string;
+  properties: string;
+  images: string;
+  updated_at: string;
 }
 
 /**
- * Сохраняет базовый список точек в файл
+ * Сохраняет массив точек в базу данных (транзакцией)
  */
-function savePointsList(points: PickupPointItem[]): void {
-  ensureCacheDir();
-  try {
-    writeFileSync(
-      POINTS_LIST_FILE,
-      JSON.stringify(
-        {
-          last_update: new Date().toISOString(),
-          count: points.length,
-          points: points,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
-    console.log(`💾 Сохранён список точек: ${points.length} шт.`);
-  } catch (error) {
-    console.error("❌ Ошибка сохранения списка точек:", error);
-    throw error;
-  }
-}
+function savePointsToDb(points: PickupPointInfoItem[]): void {
+  const total = points.length;
+  console.log(`💾 Сохранение ${total} точек в SQLite...`);
 
-/**
- * Загружает базовый список точек из файла
- */
-function loadPointsList(): {
-  points: PickupPointItem[];
-  last_update?: string;
-  count?: number;
-} | null {
-  try {
-    if (!existsSync(POINTS_LIST_FILE)) {
-      return null;
+  const insertMany = db.transaction((items: PickupPointInfoItem[]) => {
+    for (const point of items) {
+      const dm = point.delivery_method;
+      const { lat, long } = dm.coordinates;
+
+      insertStmt.run(
+        dm.map_point_id,
+        point.enabled ? 1 : 0,
+        dm.name,
+        dm.address,
+        dm.address_details.city,
+        dm.address_details.region,
+        dm.address_details.street,
+        dm.address_details.house,
+        dm.description,
+        lat,
+        long,
+        dm.location_id,
+        dm.delivery_type.id,
+        dm.delivery_type.name,
+        dm.fitting_rooms_count,
+        dm.pvz_rating,
+        dm.storage_period,
+        JSON.stringify(dm.working_hours),
+        JSON.stringify(dm.properties),
+        JSON.stringify(dm.images),
+      );
     }
-    const data = JSON.parse(readFileSync(POINTS_LIST_FILE, "utf-8"));
-    console.log(`📂 Загружен список точек из кэша: ${data.points.length} шт.`);
-    return data;
-  } catch (error) {
-    console.error("❌ Ошибка загрузки списка точек:", error);
-    return null;
-  }
-}
+  });
 
-/**
- * Сохраняет детальную информацию о точках в файл
- */
-function savePointsInfo(points: PickupPointInfoItem[]): void {
-  ensureCacheDir();
-  try {
-    writeFileSync(
-      POINTS_INFO_FILE,
-      JSON.stringify(
-        {
-          last_update: new Date().toISOString(),
-          count: points.length,
-          points: points,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
-    console.log(`💾 Сохранена детальная информация: ${points.length} шт.`);
-  } catch (error) {
-    console.error("❌ Ошибка сохранения детальной информации:", error);
-    throw error;
-  }
-}
-
-/**
- * Загружает детальную информацию о точках из файла
- */
-export function loadPointsInfo(): { points: PickupPointInfoItem[] } | null {
-  try {
-    if (!existsSync(POINTS_INFO_FILE)) {
-      return null;
-    }
-    const data = JSON.parse(readFileSync(POINTS_INFO_FILE, "utf-8"));
-    return data;
-  } catch (error) {
-    console.error("❌ Ошибка загрузки детальной информации:", error);
-    return null;
-  }
+  insertMany(points);
+  console.log(`✅ Сохранено ${total} точек в SQLite`);
 }
 
 /**
  * Получает детальную информацию о всех точках пачками
- * @param points - базовый список точек
- * @returns массив детальной информации
  */
 async function fetchAllPointsInfo(
   points: PickupPointItem[],
@@ -134,7 +112,7 @@ async function fetchAllPointsInfo(
   const batches = Math.ceil(totalPoints / BATCH_SIZE);
 
   console.log(
-    `🔄 Начинаем получение детальной информации: ${totalPoints} точек, ${batches} пачек`,
+    `🔄 Получение детальной информации: ${totalPoints} точек, ${batches} пачек`,
   );
 
   for (let i = 0; i < batches; i++) {
@@ -145,35 +123,123 @@ async function fetchAllPointsInfo(
       .map((p) => p.map_point_id.toString());
 
     try {
-      console.log(
-        `📦 Обработка пачки ${i + 1}/${batches} (точки ${start + 1}-${end})`,
-      );
+      console.log(`📦 Пачка ${i + 1}/${batches} (точки ${start + 1}-${end})`);
 
       const response = await getPickupPointsInfo(batchIds);
       allInfo.push(...response.points);
 
-      // Небольшая пауза между запросами, чтобы не перегрузить API
+      // Пауза между запросами
       if (i < batches - 1) {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
     } catch (error) {
-      console.error(
-        `❌ Ошибка при обработке пачки ${i + 1}/${batches}:`,
-        error,
-      );
-      // Продолжаем с следующей пачкой
+      console.error(`❌ Ошибка пачки ${i + 1}/${batches}:`, error);
     }
   }
 
   console.log(
-    `✅ Получена детальная информация о ${allInfo.length} из ${totalPoints} точек`,
+    `✅ Получена информация о ${allInfo.length} из ${totalPoints} точек`,
   );
   return allInfo;
 }
 
 /**
+ * Маппинг строки БД в формат Tilda
+ */
+function mapRowToTilda(row: PickupPointRow): TildaPickupPoint {
+  let workTime = "";
+  try {
+    const hours: Array<{
+      periods: Array<{
+        min: { hours: number; minutes: number };
+        max: { hours: number; minutes: number };
+      }>;
+    }> = JSON.parse(row.working_hours);
+
+    workTime =
+      hours
+        .slice(0, 1)
+        .flatMap((wh) =>
+          wh.periods.map(
+            (p) =>
+              `${String(p.min.hours).padStart(2, "0")}:${String(p.min.minutes).padStart(2, "0")}` +
+              `–` +
+              `${String(p.max.hours).padStart(2, "0")}:${String(p.max.minutes).padStart(2, "0")}`,
+          ),
+        )
+        .join(", ") || "";
+  } catch {
+    workTime = "";
+  }
+
+  return {
+    id: String(row.map_point_id),
+    name: row.name,
+    address: row.address,
+    coordinates: [row.lat, row.long],
+    workTime,
+    phones: [],
+    addressComment: row.description,
+    cash: "n",
+    postalCode: "",
+  };
+}
+
+/**
+ * Получает ПВЗ из базы с простым текстовым поиском и пагинацией
+ */
+export function getTildaPickupPoints(options?: {
+  q?: string;
+  limit?: number;
+  offset?: number;
+}): {
+  pvz: TildaPickupPoint[];
+  total: number;
+  limit: number;
+  offset: number;
+} {
+  const { q, limit = 500, offset = 0 } = options || {};
+
+  let where = "WHERE enabled = 1";
+  const params: (string | number)[] = [];
+
+  if (q) {
+    where +=
+      " AND (name LIKE ? OR address LIKE ? OR city LIKE ? OR region LIKE ?)";
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+  }
+
+  // Общее количество
+  const totalResult = db
+    .prepare(`SELECT COUNT(*) as total FROM pickup_points ${where}`)
+    .get(...params) as { total: number };
+
+  // Данные с пагинацией
+  const rows = db
+    .prepare(
+      `SELECT * FROM pickup_points ${where} ORDER BY city, name LIMIT ? OFFSET ?`,
+    )
+    .all(...params, limit, offset) as PickupPointRow[];
+
+  const pvz: TildaPickupPoint[] = rows.map(mapRowToTilda);
+
+  return { pvz, total: totalResult.total, limit, offset };
+}
+
+/**
+ * Получает ВСЕ ПВЗ из базы в формате Tilda (без пагинации)
+ */
+export function getAllTildaPickupPoints(): TildaPickupPoint[] {
+  const rows = db
+    .prepare(
+      "SELECT * FROM pickup_points WHERE enabled = 1 ORDER BY city, name",
+    )
+    .all() as PickupPointRow[];
+  return rows.map(mapRowToTilda);
+}
+
+/**
  * Инициализирует кэш точек самовывоза
- * Вызывается при запуске сервера
  */
 export async function initializePickupPointsCache(): Promise<void> {
   if (!ozonConfig.isConfigured) {
@@ -185,40 +251,39 @@ export async function initializePickupPointsCache(): Promise<void> {
 
   console.log("🚀 Инициализация кэша точек самовывоза...");
 
-  // Сначала пробуем загрузить из файлов кэша
-  const cachedList = loadPointsList();
-  const cachedInfo = loadPointsInfo();
-  if (cachedList && cachedInfo) {
+  // Проверяем что уже есть в базе
+  const existingCount = (countStmt.get() as { count: number }).count;
+  const lastUpdate = (lastUpdateStmt.get() as { last_update: string | null })
+    .last_update;
+
+  if (existingCount > 0) {
     console.log(
-      `📂 Загружен кэш из файлов: ${cachedList.points.length} точек (обновлено: ${cachedList.last_update || "неизвестно"})`,
+      `📂 В базе ${existingCount} точек (обновлено: ${lastUpdate || "неизвестно"})`,
     );
   } else {
-    console.log("📂 Кэш-файлы не найдены, будет выполнен запрос к API");
+    console.log("📂 База пуста, будет выполнен запрос к API");
   }
 
-  // Запускаем ежедневное обновление независимо от наличия кэша
+  // Запускаем ежедневное обновление
   scheduleDailyUpdate();
 
-  // Пытаемся обновить из API (если есть токен)
+  // Пытаемся обновить из API
   try {
-    // 1. Получаем базовый список точек
     console.log("📍 Шаг 1: Получение базового списка точек...");
     const listResponse = await getPickupPointsList();
-    savePointsList(listResponse.points);
 
-    // 2. Получаем детальную информацию для всех точек
     console.log("📍 Шаг 2: Получение детальной информации...");
     const infoData = await fetchAllPointsInfo(listResponse.points);
-    savePointsInfo(infoData);
 
+    savePointsToDb(infoData);
     console.log("✅ Кэш точек самовывоза успешно обновлён из API");
   } catch (error) {
     console.error("❌ Ошибка обновления кэша из API:", error);
-    if (cachedList && cachedInfo) {
-      console.log("⚠️  Используем кэш из файлов как fallback");
+    if (existingCount > 0) {
+      console.log("⚠️  Используем данные из базы как fallback");
     } else {
       console.warn(
-        "⚠️  Нет кэша и нет доступа к API. Кэш будет заполнен после авторизации",
+        "⚠️  База пуста и нет доступа к API. Данные загрузятся после авторизации",
       );
     }
   }
@@ -233,17 +298,12 @@ export async function refreshPickupPointsCache(): Promise<void> {
     return;
   }
 
-  console.log("🔄 Обновление кэша точек самовывоза...");
+  console.log("🔄 Обновление кэша точек самывоза...");
 
   try {
-    // 1. Получаем базовый список точек
     const listResponse = await getPickupPointsList();
-    savePointsList(listResponse.points);
-
-    // 2. Получаем детальную информацию
     const infoData = await fetchAllPointsInfo(listResponse.points);
-    savePointsInfo(infoData);
-
+    savePointsToDb(infoData);
     console.log("✅ Кэш точек самовывоза успешно обновлён");
   } catch (error) {
     console.error("❌ Ошибка обновления кэша:", error);
@@ -252,10 +312,8 @@ export async function refreshPickupPointsCache(): Promise<void> {
 
 /**
  * Планирует ежедневное обновление кэша
- * Запускается в UPDATE_HOUR часов (14:00 по умолчанию)
  */
 function scheduleDailyUpdate(): void {
-  // Очищаем предыдущий таймер
   if (dailyUpdateTimer) {
     clearTimeout(dailyUpdateTimer);
     dailyUpdateTimer = null;
@@ -265,7 +323,6 @@ function scheduleDailyUpdate(): void {
   const nextUpdate = new Date();
   nextUpdate.setHours(UPDATE_HOUR, 0, 0, 0);
 
-  // Если время обновления уже прошло сегодня, планируем на завтра
   if (now >= nextUpdate) {
     nextUpdate.setDate(nextUpdate.getDate() + 1);
   }
@@ -277,16 +334,14 @@ function scheduleDailyUpdate(): void {
   );
 
   console.log(
-    `⏰ Следующее обновление кэша: ${nextUpdate.toLocaleString("ru-RU")} (через ${hoursUntilUpdate}ч ${minutesUntilUpdate}мин)`,
+    `⏰ Следующее обновление: ${nextUpdate.toLocaleString("ru-RU")} (через ${hoursUntilUpdate}ч ${minutesUntilUpdate}мин)`,
   );
 
   dailyUpdateTimer = setTimeout(async () => {
     await refreshPickupPointsCache();
-    // Планируем следующее обновление
     scheduleDailyUpdate();
   }, timeUntilUpdate);
 
-  // Не блокируем выход из процесса
   dailyUpdateTimer.unref();
 }
 
@@ -294,19 +349,16 @@ function scheduleDailyUpdate(): void {
  * Получает статус кэша
  */
 export function getCacheStatus(): {
-  listExists: boolean;
-  infoExists: boolean;
+  totalPoints: number;
   lastUpdate: string | null;
-  pointsCount: number;
 } {
-  const listData = loadPointsList();
-  const infoData = loadPointsInfo();
+  const count = (countStmt.get() as { count: number }).count;
+  const lastUpdate = (lastUpdateStmt.get() as { last_update: string | null })
+    .last_update;
 
   return {
-    listExists: existsSync(POINTS_LIST_FILE),
-    infoExists: existsSync(POINTS_INFO_FILE),
-    lastUpdate: listData?.last_update || null,
-    pointsCount: listData?.count || 0,
+    totalPoints: count,
+    lastUpdate,
   };
 }
 

@@ -1,7 +1,9 @@
 /**
  * Rate Limiter для API Ozon
- * Ограничивает количество запросов до 10 в секунду
- * Очередь до 1000 запросов, остальные отбрасываются
+ *
+ * Алгоритм: фиксированный интервал между запросами (token bucket / sliding window).
+ * Каждый запрос отправляется не раньше, чем lastRequestTime + (1000 / requestsPerSecond).
+ * Пока лимит не достигнут — запросы пролетают мгновенно.
  */
 
 interface QueueItem {
@@ -14,24 +16,25 @@ export class RateLimiter {
   private queue: QueueItem[] = [];
   private isProcessing = false;
   private lastRequestTime = 0;
-  private requestCount = 0;
-  private lastSecondReset = Date.now();
 
   constructor(
-    private readonly requestsPerSecond: number = 10,
+    private readonly requestsPerSecond: number = 35,
     private readonly maxQueueSize: number = 1000,
   ) {}
 
+  /** Минимальный интервал между запросами в ms */
+  private get minInterval(): number {
+    return 1000 / this.requestsPerSecond;
+  }
+
   /**
-   * Добавляет запрос в очередь
-   * @param fetchFn - функция, выполняющая fetch запрос
-   * @returns Promise с ответом
+   * Добавляет запрос в очередь и возвращает Promise с результатом.
+   * Если очередь переполнена — сразу отбрасывает с ошибкой.
    */
   async enqueue<T extends Response>(fetchFn: () => Promise<T>): Promise<T> {
-    // Проверяем размер очереди
     if (this.queue.length >= this.maxQueueSize) {
       const error = new Error(
-        `Превышен лимит очереди запросов (${this.maxQueueSize}). Запрос отклонён.`,
+        `Rate limiter: очередь переполнена (${this.maxQueueSize}). Запрос отклонён.`,
       );
       console.error("❌", error.message);
       throw error;
@@ -44,130 +47,147 @@ export class RateLimiter {
         reject,
       });
 
-      console.log(
-        `📥 Запрос добавлен в очередь. Размер очереди: ${this.queue.length}`,
-      );
-
-      // Запускаем обработку очереди
-      this.processQueue();
+      this.scheduleProcessing();
     });
   }
 
   /**
-   * Обрабатывает очередь запросов с ограничением скорости
+   * Планирует запуск обработки очереди.
+   * Если обработка уже идёт — ничего не делает (re-check после завершения покрыет новый элемент).
    */
-  private async processQueue(): Promise<void> {
-    // Если уже обрабатываем или очередь пуста - выходим
-    if (this.isProcessing || this.queue.length === 0) {
-      return;
+  private scheduleProcessing(): void {
+    if (this.isProcessing) return;
+
+    const waitMs = this.timeUntilNextSlot();
+
+    if (waitMs <= 0) {
+      // Слот свободен прямо сейчас — запускаем через microtask,
+      // чтобы не блокировать стек вызовов enqueue
+      Promise.resolve().then(() => this.processQueue());
+    } else {
+      setTimeout(() => this.processQueue(), waitMs);
     }
-
-    this.isProcessing = true;
-
-    while (this.queue.length > 0) {
-      const now = Date.now();
-
-      // Сбрасываем счётчик каждую секунду
-      if (now - this.lastSecondReset >= 1000) {
-        this.requestCount = 0;
-        this.lastSecondReset = now;
-      }
-
-      // Если достигли лимита запросов в секунду - ждём
-      if (this.requestCount >= this.requestsPerSecond) {
-        const waitTime = 1000 - (now - this.lastSecondReset);
-        console.log(
-          `⏳ Достигнут лимит ${this.requestsPerSecond} req/s. Ожидание ${waitTime}ms...`,
-        );
-        await this.sleep(waitTime);
-        continue;
-      }
-
-      // Вычисляем минимальное время между запросами
-      const minInterval = 1000 / this.requestsPerSecond;
-      const timeSinceLastRequest = now - this.lastRequestTime;
-
-      // Если прошло недостаточно времени - ждём
-      if (timeSinceLastRequest < minInterval && this.lastRequestTime > 0) {
-        const waitTime = minInterval - timeSinceLastRequest;
-        await this.sleep(waitTime);
-      }
-
-      // Извлекаем запрос из очереди
-      const item = this.queue.shift();
-      if (!item) break;
-
-      try {
-        this.lastRequestTime = Date.now();
-        this.requestCount++;
-
-        console.log(
-          `🚀 Выполнение запроса. Счётчик: ${this.requestCount}/${this.requestsPerSecond} req/s`,
-        );
-
-        const response = await item.execute();
-        item.resolve(response);
-      } catch (error) {
-        console.error("❌ Ошибка выполнения запроса:", error);
-        item.reject(error instanceof Error ? error : new Error(String(error)));
-      }
-    }
-
-    this.isProcessing = false;
   }
 
   /**
-   * Утилита для задержки
+   * Сколько мс нужно подождать до следующего разрешённого момента запроса.
+   * 0 — если можно выполнять сразу.
    */
+  private timeUntilNextSlot(): number {
+    if (this.lastRequestTime === 0) return 0;
+    const elapsed = Date.now() - this.lastRequestTime;
+    return Math.max(0, this.minInterval - elapsed);
+  }
+
+  /**
+   * Основной цикл обработки очереди.
+   *
+   * Ключевые гарантии:
+   * - try-catch вокруг ВСЕГО тела → isProcessing ВСЕГДА сбрасывается
+   * - после выхода из while — перепроверка очереди (защита от race condition,
+   *   когда enqueue добавил элемент в момент завершения цикла)
+   * - ни один запрос не зависнет: каждый элемент очереди получит resolve/reject
+   */
+  private async processQueue(): Promise<void> {
+    // Двойная проверка: если кто-то уже обрабатывает — выходим
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+
+    try {
+      while (this.queue.length > 0) {
+        // Ждём до ближайшего свободного слота
+        const waitMs = this.timeUntilNextSlot();
+        if (waitMs > 0) {
+          console.warn(
+            `⏳ Rate limiter: ожидание ${waitMs}ms (лимит ${this.requestsPerSecond} req/s, очередь: ${this.queue.length})`,
+          );
+          await this.sleep(waitMs);
+        }
+
+        // Извлекаем элемент из очереди
+        const item = this.queue.shift();
+        if (!item) break;
+
+        // Фиксируем время отправки ДО выполнения,
+        // чтобы следующий запрос уже отсчитывался от этого момента
+        this.lastRequestTime = Date.now();
+
+        try {
+          const response = await item.execute();
+          item.resolve(response);
+        } catch (error) {
+          console.error("❌ Rate limiter: ошибка выполнения запроса:", error);
+          item.reject(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        }
+      }
+    } catch (fatalError) {
+      // Непредвиденная ошибка (не из execute — он обёрнут своим try-catch)
+      console.error(
+        "❌ Rate limiter: фатальная ошибка processQueue:",
+        fatalError,
+      );
+    } finally {
+      // ВСЕГДА сбрасываем флаг обработки
+      this.isProcessing = false;
+
+      // ПЕРЕПРОВЕРКА: если в момент, когда мы сбросили isProcessing,
+      // кто-то добавил элемент в очередь — запускаем обработку заново.
+      // Это защищает от race condition: enqueue проверил isProcessing === true
+      // и не вызвал scheduleProcessing, но мы уже выходили.
+      if (this.queue.length > 0) {
+        this.scheduleProcessing();
+      }
+    }
+  }
+
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Получает текущий размер очереди
-   */
+  /** Текущий размер очереди */
   getQueueSize(): number {
     return this.queue.length;
   }
 
-  /**
-   * Очищает очередь
-   */
+  /** Очищает очередь, отклоняя все ожидающие запросы */
   clearQueue(): void {
-    const rejectedCount = this.queue.length;
-    this.queue.forEach((item) => {
-      item.reject(new Error("Очередь очищена"));
-    });
+    const count = this.queue.length;
+    this.queue.forEach((item) =>
+      item.reject(new Error("Rate limiter: очередь очищена")),
+    );
     this.queue = [];
-    console.log(`🗑️ Очередь очищена. Отклонено запросов: ${rejectedCount}`);
+    if (count > 0) {
+      console.warn(
+        `🗑️ Rate limiter: очередь очищена, отклонено ${count} запросов`,
+      );
+    }
   }
 
-  /**
-   * Получает статистику
-   */
+  /** Статистика для мониторинга */
   getStats(): {
     queueSize: number;
     maxQueueSize: number;
     requestsPerSecond: number;
-    currentRequestCount: number;
+    minIntervalMs: number;
   } {
     return {
       queueSize: this.queue.length,
       maxQueueSize: this.maxQueueSize,
       requestsPerSecond: this.requestsPerSecond,
-      currentRequestCount: this.requestCount,
+      minIntervalMs: this.minInterval,
     };
   }
 }
 
-// Глобальный экземпляр rate limiter для Ozon API
+// ─── Глобальный экземпляр ────────────────────────────────────────────────────
+
 export const ozonRateLimiter = new RateLimiter(10, 1000);
 
 /**
- * Обёртка для fetch с rate limiting
- * @param url - URL запроса
- * @param options - параметры fetch
- * @returns Promise<Response>
+ * Обёртка для fetch с rate limiting.
+ * Пропускает запросы через очередь ozonRateLimiter.
  */
 export async function rateLimitedFetch(
   url: string | URL,
