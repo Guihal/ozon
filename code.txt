@@ -1,0 +1,74 @@
+export async function fetchAccessToken(
+  grantType: "authorization_code" | "refresh_token",
+  code?: string,
+  refreshToken?: string,
+): Promise<TokenData> {
+  if (!ozonConfig.isConfigured) {
+    throw new Error("OAuth не настроен. Проверьте переменные окружения.");
+  }
+
+  const body: Record<string, string> = {
+    grant_type: grantType,
+    client_id: String(ozonConfig.clientId),
+    client_secret: ozonConfig.clientSecret,
+  };
+
+  if (grantType === "authorization_code") {
+    if (!code) {
+      throw new Error("Для authorization_code требуется параметр code");
+    }
+    body.code = code;
+    body.redirect_uri = ozonConfig.redirectUri;
+  } else if (grantType === "refresh_token") {
+    if (!refreshToken) {
+      throw new Error("Для refresh_token требуется параметр refresh_token");
+    }
+    body.refresh_token = refreshToken;
+  }
+
+  try {
+    const jsonBody = JSON.stringify(body);
+    console.log("📤 Отправляем запрос на получение токена");
+    console.log("URL:", ozonConfig.oauthTokenUrl);
+    console.log("Тело (raw):", jsonBody);
+
+    const response = await rateLimitedFetch(ozonConfig.oauthTokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonBody,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.log(errorData);
+      console.error("Тело запроса:", JSON.stringify(body, null, 2));
+      console.error("Статус ошибки:", response.status);
+      console.error("Полная ошибка:", JSON.stringify(errorData, null, 2));
+      throw new Error(
+        `Ошибка получения токена: ${response.status} ${response.statusText} - ${errorData.message || "Неизвестная ошибка"}`,
+      );
+    }
+
+    const data: TokenData = await response.json();
+
+    // Обновляем глобальное хранилище
+    tokenCache.value = data.access_token;
+    tokenCache.refresh_token = data.refresh_token || null;
+    tokenCache.expires = Date.now() + data.expires_in * 1000;
+
+    // Сохраняем в файл
+    saveTokenToFile();
+
+    // Запускаем автоматическое обновление
+    scheduleAutoRefresh(data.expires_in);
+
+    console.log(`Токен получен. Истекает через ${data.expires_in} секунд.`);
+
+    return data;
+  } catch (error) {
+    console.error("Ошибка fetchAccessToken:", error);
+    throw error;
+  }
+}
