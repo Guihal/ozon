@@ -59,6 +59,47 @@ function initDatabase(): Database {
     "CREATE INDEX IF NOT EXISTS idx_pp_coords ON pickup_points(lat, long)",
   );
 
+  // Виртуальная FTS5 таблица для полнотекстового поиска
+  db.run(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS pickup_points_fts
+    USING fts5(
+      map_point_id UNINDEXED,
+      name,
+      address,
+      city,
+      region,
+      content='pickup_points',
+      content_rowid='map_point_id'
+    )
+  `);
+
+  // Триггеры для синхронизации FTS при INSERT/UPDATE/DELETE
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS pp_fts_insert
+    AFTER INSERT ON pickup_points BEGIN
+      INSERT INTO pickup_points_fts(rowid, map_point_id, name, address, city, region)
+      VALUES (new.map_point_id, new.map_point_id, new.name, new.address, new.city, new.region);
+    END
+  `);
+
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS pp_fts_update
+    AFTER UPDATE ON pickup_points BEGIN
+      INSERT INTO pickup_points_fts(pickup_points_fts, rowid, map_point_id, name, address, city, region)
+      VALUES ('delete', old.map_point_id, old.map_point_id, old.name, old.address, old.city, old.region);
+      INSERT INTO pickup_points_fts(rowid, map_point_id, name, address, city, region)
+      VALUES (new.map_point_id, new.map_point_id, new.name, new.address, new.city, new.region);
+    END
+  `);
+
+  db.run(`
+    CREATE TRIGGER IF NOT EXISTS pp_fts_delete
+    AFTER DELETE ON pickup_points BEGIN
+      INSERT INTO pickup_points_fts(pickup_points_fts, rowid, map_point_id, name, address, city, region)
+      VALUES ('delete', old.map_point_id, old.map_point_id, old.name, old.address, old.city, old.region);
+    END
+  `);
+
   console.log("✅ SQLite база данных инициализирована:", DB_FILE);
 
   return db;

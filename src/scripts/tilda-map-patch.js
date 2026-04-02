@@ -1,5 +1,5 @@
 (function () {
-  const BACKEND = "https://your-backend.com";
+  const BACKEND = "https://orderinme.fvds.ru";
 
   function waitFor(getter, cb, ms = 200, max = 75) {
     let n = 0;

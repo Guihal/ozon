@@ -213,30 +213,69 @@ export function getTildaPickupPoints(options?: {
 } {
   const { q, limit = 500, offset = 0 } = options || {};
 
-  let where = "WHERE enabled = 1";
-  const params: (string | number)[] = [];
+  let rows: PickupPointRow[];
+  let total: number;
 
   if (q) {
-    where +=
-      " AND (name LIKE ? OR address LIKE ? OR city LIKE ? OR region LIKE ?)";
-    params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    // FTS поиск — быстро, использует инвертированный индекс
+    // * в конце = prefix search: "авто" найдёт "автово"
+    const ftsQuery = q
+      .trim()
+      .split(/\s+/)
+      .map((w) => `${w}*`)
+      .join(" ");
+
+    const ftsRows = db
+      .prepare(
+        `
+      SELECT p.*
+      FROM pickup_points p
+      JOIN pickup_points_fts f ON f.map_point_id = p.map_point_id
+      WHERE pickup_points_fts MATCH ?
+        AND p.enabled = 1
+      ORDER BY rank
+      LIMIT ? OFFSET ?
+    `,
+      )
+      .all(ftsQuery, limit, offset) as PickupPointRow[];
+
+    const ftsTotal = db
+      .prepare(
+        `
+      SELECT COUNT(*) as total
+      FROM pickup_points p
+      JOIN pickup_points_fts f ON f.map_point_id = p.map_point_id
+      WHERE pickup_points_fts MATCH ?
+        AND p.enabled = 1
+    `,
+      )
+      .get(ftsQuery) as { total: number };
+
+    rows = ftsRows;
+    total = ftsTotal.total;
+  } else {
+    // Без поиска — обычная пагинация
+    rows = db
+      .prepare(
+        `
+      SELECT * FROM pickup_points
+      WHERE enabled = 1
+      ORDER BY city, name
+      LIMIT ? OFFSET ?
+    `,
+      )
+      .all(limit, offset) as PickupPointRow[];
+
+    total = (
+      db
+        .prepare(
+          "SELECT COUNT(*) as total FROM pickup_points WHERE enabled = 1",
+        )
+        .get() as { total: number }
+    ).total;
   }
 
-  // Общее количество
-  const totalResult = db
-    .prepare(`SELECT COUNT(*) as total FROM pickup_points ${where}`)
-    .get(...params) as { total: number };
-
-  // Данные с пагинацией
-  const rows = db
-    .prepare(
-      `SELECT * FROM pickup_points ${where} ORDER BY city, name LIMIT ? OFFSET ?`,
-    )
-    .all(...params, limit, offset) as PickupPointRow[];
-
-  const pvz: TildaPickupPoint[] = rows.map(mapRowToTilda);
-
-  return { pvz, total: totalResult.total, limit, offset };
+  return { pvz: rows.map(mapRowToTilda), total, limit, offset };
 }
 
 /**
@@ -282,6 +321,18 @@ export function getTildaPickupPointsByViewport(options: {
 }
 
 /**
+ * Перестройка FTS индекса из существующих данных
+ */
+export function rebuildFts(): void {
+  console.log("🔄 Перестройка FTS индекса...");
+  db.run(`
+    INSERT INTO pickup_points_fts(pickup_points_fts)
+    VALUES ('rebuild')
+  `);
+  console.log("✅ FTS индекс перестроен");
+}
+
+/**
  * Инициализирует кэш точек самовывоза
  */
 export async function initializePickupPointsCache(): Promise<void> {
@@ -317,6 +368,7 @@ export async function initializePickupPointsCache(): Promise<void> {
 
     console.log("📍 Шаг 2: Получение и сохранение детальной информации...");
     await fetchAllPointsInfo(listResponse.points);
+    rebuildFts();
     console.log("✅ Кэш точек самовывоза успешно обновлён из API");
   } catch (error) {
     console.error("❌ Ошибка обновления кэша из API:", error);
@@ -344,6 +396,7 @@ export async function refreshPickupPointsCache(): Promise<void> {
   try {
     const listResponse = await getPickupPointsList();
     await fetchAllPointsInfo(listResponse.points);
+    rebuildFts();
     console.log("✅ Кэш точек самовывоза успешно обновлён");
   } catch (error) {
     console.error("❌ Ошибка обновления кэша:", error);

@@ -3,7 +3,9 @@
   "version": "1.50.0",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch src/index.ts"
+    "dev": "bun run --watch src/index.ts",
+    "db:drop": "rm -f src/cache/ozon.db",
+    "db:rebuild-fts": "bun run src/scripts/rebuild-fts.ts"
   },
   "dependencies": {
     "elysia": "latest",
