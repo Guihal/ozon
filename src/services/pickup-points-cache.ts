@@ -185,10 +185,13 @@ function mapRowToTilda(row: PickupPointRow): TildaPickupPoint {
     workTime = "";
   }
 
+  const cleanAddress = row.address;
+  const displayName = `${row.name}: ${cleanAddress}`; // "Ozon: ул. Пушкина, 10"
+
   return {
     id: String(row.map_point_id),
-    name: row.name,
-    address: row.address,
+    name: displayName,
+    address: cleanAddress, // Передаем чистый адрес отдельно
     coordinates: [row.lat, row.long],
     workTime,
     phones: [],

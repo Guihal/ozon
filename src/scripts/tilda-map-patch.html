@@ -1,0 +1,160 @@
+<script>
+  (function () {
+    const BACKEND = "https://orderinme.fvds.ru";
+
+    function waitFor(getter, cb, ms = 200, max = 75) {
+      let n = 0;
+      const t = setInterval(() => {
+        const val = getter();
+        if (val) {
+          clearInterval(t);
+          cb(val);
+        }
+        if (++n >= max) clearInterval(t);
+      }, ms);
+    }
+
+    let pendingMapToken = null;
+    let searchDebounce = null;
+
+    // Функция загрузки точек для текущей области карты
+    async function loadPointsForViewport(map, delivery) {
+      const zoom = map.getZoom();
+      if (zoom < 10) {
+        delivery.mapAddPoints(null, [], null);
+        return;
+      }
+
+      const bounds = map.getBounds();
+      const token = Symbol();
+      pendingMapToken = token;
+
+      try {
+        const res = await fetch(`${BACKEND}/v1/delivery/map`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            viewport: {
+              left_bottom: { lat: bounds[0][0], long: bounds[0][1] },
+              right_top: { lat: bounds[1][0], long: bounds[1][1] },
+            },
+            zoom,
+          }),
+        });
+
+        if (pendingMapToken !== token) return;
+
+        const points = await res.json();
+        delivery.mapAddPoints(null, points, null);
+      } catch (e) {
+        console.warn("[OzonPatch] Ошибка загрузки карты:", e);
+      }
+    }
+
+    waitFor(
+      () => window.tcart_newDelivery,
+      (delivery) => {
+        // --- 1. ПАТЧ ПОИСКА (Живой поиск через Input) ---
+
+        const origChangeSearchboxHandler = delivery.changeSearchboxInputHandler;
+
+        // Перехватываем метод с сохранением всех трех аргументов Tilda
+        delivery.changeSearchboxInputHandler = function (t, r, n) {
+          const i = this; // Контекст delivery
+          const a = r ? r.querySelector(".searchbox-input") : null;
+          const o = r ? r.querySelector(".searchbox-list") : null;
+
+          // Если это не поиск ПВЗ или введено мало символов — отдаем управление оригиналу
+          const pattern = a && a.value ? a.value.trim() : "";
+          if (n !== "pickup" || pattern.length < 3) {
+            return origChangeSearchboxHandler.call(this, t, r, n);
+          }
+
+          // Если мы здесь — это живой поиск ПВЗ (n === "pickup")
+          clearTimeout(searchDebounce);
+          searchDebounce = setTimeout(() => {
+            if (window.tcart__preloader) window.tcart__preloader.show();
+
+            // Вызываем ваш API через существующий getPickupList
+            i.getPickupList({
+              pattern: pattern,
+              onDone: (points) => {
+                if (window.tcart__preloader) window.tcart__preloader.hide();
+
+                // 1. Обновляем локальный стейт Tilda, чтобы она "видела" эти точки
+                const searchboxId = r.getAttribute("id");
+                if (!i.deliveryState.searchboxes[searchboxId]) {
+                  i.deliveryState.searchboxes[searchboxId] = {};
+                }
+                // Записываем точки в стейт, откуда Tilda их берет при клике
+                i.deliveryState.searchboxes[searchboxId].autocompleteAddress =
+                  points;
+                i.searchList = points;
+
+                // 2. Отрисовываем список (передаем контейнер 'o', данные и тип)
+                i.fillSearchList(o, points, "pickup");
+
+                // 3. Вешаем обработчики клика на новые элементы списка
+                i.choseSearchListItemHandler(r, n);
+
+                // Показываем список, если он пуст или скрыт
+                if (o) o.style.display = "block";
+              },
+              onFail: () => {
+                if (window.tcart__preloader) window.tcart__preloader.hide();
+                if (o)
+                  o.innerHTML =
+                    '<div class="searchbox-list-item t-text">' +
+                    t_delivery__dict("noResult") +
+                    "</div>";
+              },
+            });
+          }, 400);
+        };
+
+        // --- 2. ПАТЧ КАРТЫ (Загрузка по движению) ---
+
+        const origMapInit = delivery.mapInit?.bind(delivery);
+        delivery.mapInit = function (...args) {
+          const result = origMapInit?.(...args);
+
+          waitFor(
+            () => window.t_delivery__map,
+            (map) => {
+              let debounce = null;
+              map.events.add("boundschange", () => {
+                clearTimeout(debounce);
+                debounce = setTimeout(
+                  () => loadPointsForViewport(map, delivery),
+                  400,
+                );
+              });
+              loadPointsForViewport(map, delivery);
+            },
+          );
+
+          return result;
+        };
+
+        // --- 3. ОБЩИЙ МЕТОД ПОЛУЧЕНИЯ ДАННЫХ ---
+
+        delivery.getPickupList = function (params) {
+          if ("pattern" in params) {
+            // Текстовый поиск
+            fetch(
+              `${BACKEND}/v1/delivery/pvz?q=${encodeURIComponent(params.pattern)}&limit=50`,
+            )
+              .then((r) => r.json())
+              .then((data) => params.onDone(data.pvz ?? []))
+              .catch(() => params.onFail?.());
+          } else {
+            // Инициализация карты (возвращаем пусто, точки загрузятся через boundschange)
+            params.onDone([]);
+          }
+        };
+
+        console.log("[OzonPatch] Интеграция Ozon (Поиск + Карта) активна ✓");
+      },
+    );
+  })();
+</script>
