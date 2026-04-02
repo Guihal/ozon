@@ -185,6 +185,21 @@ export async function initializePickupPointsCache(): Promise<void> {
 
   console.log("🚀 Инициализация кэша точек самовывоза...");
 
+  // Сначала пробуем загрузить из файлов кэша
+  const cachedList = loadPointsList();
+  const cachedInfo = loadPointsInfo();
+  if (cachedList && cachedInfo) {
+    console.log(
+      `📂 Загружен кэш из файлов: ${cachedList.points.length} точек (обновлено: ${cachedList.last_update || "неизвестно"})`,
+    );
+  } else {
+    console.log("📂 Кэш-файлы не найдены, будет выполнен запрос к API");
+  }
+
+  // Запускаем ежедневное обновление независимо от наличия кэша
+  scheduleDailyUpdate();
+
+  // Пытаемся обновить из API (если есть токен)
   try {
     // 1. Получаем базовый список точек
     console.log("📍 Шаг 1: Получение базового списка точек...");
@@ -196,15 +211,16 @@ export async function initializePickupPointsCache(): Promise<void> {
     const infoData = await fetchAllPointsInfo(listResponse.points);
     savePointsInfo(infoData);
 
-    console.log("✅ Кэш точек самовывоза успешно инициализирован");
-
-    // 3. Запускаем ежедневное обновление
-    scheduleDailyUpdate();
+    console.log("✅ Кэш точек самовывоза успешно обновлён из API");
   } catch (error) {
-    console.error("❌ Ошибка инициализации кэша:", error);
-    console.warn(
-      "⚠️  Сервер продолжит работу без кэша. Кэш будет заполнен при первом запросе с токеном авторизации",
-    );
+    console.error("❌ Ошибка обновления кэша из API:", error);
+    if (cachedList && cachedInfo) {
+      console.log("⚠️  Используем кэш из файлов как fallback");
+    } else {
+      console.warn(
+        "⚠️  Нет кэша и нет доступа к API. Кэш будет заполнен после авторизации",
+      );
+    }
   }
 }
 

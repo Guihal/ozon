@@ -14,6 +14,7 @@ import {
   generateErrorHTML,
   createHTMLResponse,
 } from "../../utils/htmlResponses";
+import { refreshPickupPointsCache } from "../../services/pickup-points-cache";
 
 /**
  * Auth module for Ozon OAuth integration
@@ -26,9 +27,9 @@ export const auth = new Elysia({ prefix: "/auth" })
   .get("/url", ({ set }) => {
     try {
       const url = getAuthUrl();
-      set.headers['Location'] = url;
+      set.headers["Location"] = url;
       set.status = 302;
-      return '';
+      return "";
     } catch (error) {
       set.status = 500;
       return error instanceof Error ? error.message : "Неизвестная ошибка";
@@ -90,6 +91,11 @@ export const auth = new Elysia({ prefix: "/auth" })
           `   Expires in: ${tokenData.expires_in - Date.now() / 1000} секунд`,
         );
         console.log(`   Scope: ${tokenData.scope.join(", ")}`);
+
+        // Запускаем обновление кэша ПВЗ в фоне после получения токена
+        refreshPickupPointsCache().catch((err) => {
+          console.error("❌ Ошибка обновления кэша ПВЗ после логина:", err);
+        });
 
         // Return HTML response for browser
         const html = generateSuccessHTML({
