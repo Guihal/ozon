@@ -5,6 +5,7 @@ import {
   getTildaPickupPoints,
   getAllTildaPickupPoints,
   getCacheStatus,
+  getTildaPickupPointsByViewport,
 } from "../../services/pickup-points-cache";
 import { appendFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
@@ -134,6 +135,37 @@ export const delivery = new Elysia({ prefix: "/v1" })
           }),
         ),
         buyerPhone: t.Optional(t.String()),
+      }),
+    },
+  )
+  .post(
+    "/delivery/map",
+    ({ body }) => {
+      const { viewport, zoom } = body;
+
+      // При маленьком zoom слишком много точек — не имеет смысла
+      if (zoom < 10) {
+        return [];
+      }
+
+      const points = getTildaPickupPointsByViewport({
+        latMin: viewport.left_bottom.lat,
+        latMax: viewport.right_top.lat,
+        lngMin: viewport.left_bottom.long,
+        lngMax: viewport.right_top.long,
+        // Чем больше zoom — тем меньше viewport — можно больше точек
+        limit: zoom >= 14 ? 500 : zoom >= 12 ? 200 : 100,
+      });
+
+      return points;
+    },
+    {
+      body: t.Object({
+        viewport: t.Object({
+          left_bottom: t.Object({ lat: t.Number(), long: t.Number() }),
+          right_top: t.Object({ lat: t.Number(), long: t.Number() }),
+        }),
+        zoom: t.Number(),
       }),
     },
   );

@@ -54,6 +54,11 @@ function initDatabase(): Database {
   db.run("CREATE INDEX IF NOT EXISTS idx_pp_enabled ON pickup_points(enabled)");
   db.run("CREATE INDEX IF NOT EXISTS idx_pp_region ON pickup_points(region)");
 
+  // Составной индекс для быстрого поиска по координатам
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_pp_coords ON pickup_points(lat, long)",
+  );
+
   console.log("✅ SQLite база данных инициализирована:", DB_FILE);
 
   return db;

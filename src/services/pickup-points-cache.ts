@@ -252,6 +252,36 @@ export function getAllTildaPickupPoints(): TildaPickupPoint[] {
 }
 
 /**
+ * Получает ПВЗ из базы по viewport (области видимости карты)
+ * Сортировка по рейтингу — при большом количестве точек
+ * сначала показываем лучшие, остальные обрезает LIMIT.
+ */
+export function getTildaPickupPointsByViewport(options: {
+  latMin: number;
+  latMax: number;
+  lngMin: number;
+  lngMax: number;
+  limit?: number;
+}): TildaPickupPoint[] {
+  const { latMin, latMax, lngMin, lngMax, limit = 300 } = options;
+
+  const rows = db
+    .prepare(
+      `
+    SELECT * FROM pickup_points
+    WHERE enabled = 1
+      AND lat BETWEEN ? AND ?
+      AND long BETWEEN ? AND ?
+    ORDER BY pvz_rating DESC
+    LIMIT ?
+  `,
+    )
+    .all(latMin, latMax, lngMin, lngMax, limit) as PickupPointRow[];
+
+  return rows.map(mapRowToTilda);
+}
+
+/**
  * Инициализирует кэш точек самовывоза
  */
 export async function initializePickupPointsCache(): Promise<void> {
