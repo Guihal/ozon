@@ -13,19 +13,19 @@
     }, ms);
   }
 
-  let pendingRequest = null;
+  let pendingMapToken = null;
 
   async function loadPointsForViewport(map, delivery) {
     const zoom = map.getZoom();
 
     if (zoom < 10) {
-      delivery.mapAddPoints([]);
+      delivery.mapAddPoints(null, [], null);
       return;
     }
 
     const bounds = map.getBounds();
-    const token = Symbol(); // уникальный токен для отмены устаревших запросов
-    pendingRequest = token;
+    const token = Symbol();
+    pendingMapToken = token;
 
     try {
       const res = await fetch(`${BACKEND}/v1/delivery/map`, {
@@ -40,11 +40,10 @@
         }),
       });
 
-      // Карта уже сдвинулась пока ждали — выбрасываем ответ
-      if (pendingRequest !== token) return;
+      if (pendingMapToken !== token) return;
 
       const points = await res.json();
-      delivery.mapAddPoints(points);
+      delivery.mapAddPoints(null, points, null);
     } catch (e) {
       console.warn("[OzonPatch] ошибка загрузки карты:", e);
     }
@@ -53,7 +52,7 @@
   waitFor(
     () => window.tcart_newDelivery,
     (delivery) => {
-      // Перехватываем mapInit — вешаем boundschange после создания карты
+      // Перехват mapInit — вешаем boundschange после создания карты
       const origMapInit = delivery.mapInit?.bind(delivery);
       delivery.mapInit = function (...args) {
         const result = origMapInit?.(...args);
@@ -62,7 +61,6 @@
           () => window.t_delivery__map,
           (map) => {
             let debounce = null;
-
             map.events.add("boundschange", () => {
               clearTimeout(debounce);
               debounce = setTimeout(
@@ -70,8 +68,6 @@
                 400,
               );
             });
-
-            // Загружаем сразу для начального viewport
             loadPointsForViewport(map, delivery);
           },
         );
@@ -79,16 +75,18 @@
         return result;
       };
 
-      // getPickupList — текстовый поиск идёт на бэк, без pattern — пусто
-      // карта сама загрузит точки через boundschange
+      // Разделяем поиск и карту по наличию pattern в объекте
       delivery.getPickupList = function (params) {
-        if (params.pattern) {
-          const url = `${BACKEND}/v1/delivery/pvz?q=${encodeURIComponent(params.pattern)}&limit=50`;
-          fetch(url)
+        if ("pattern" in params) {
+          // Текстовый поиск → бэк → searchbox
+          fetch(
+            `${BACKEND}/v1/delivery/pvz?q=${encodeURIComponent(params.pattern)}&limit=50`,
+          )
             .then((r) => r.json())
             .then((data) => params.onDone(data.pvz ?? []))
             .catch(() => params.onFail?.());
         } else {
+          // Инициализация карты → пустой массив, точки грузим сами
           params.onDone([]);
         }
       };

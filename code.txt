@@ -1,74 +1,2185 @@
-export async function fetchAccessToken(
-  grantType: "authorization_code" | "refresh_token",
-  code?: string,
-  refreshToken?: string,
-): Promise<TokenData> {
-  if (!ozonConfig.isConfigured) {
-    throw new Error("OAuth не настроен. Проверьте переменные окружения.");
+# Code Map: tcart.js
+
+## Module Overview
+
+Файл tcart.js (9104 строки) — скомпилированный Babel-бандл модуля корзины покупок платформы **Tilda** (блок ST100 / t706). Содержит полный цикл работы корзины: инициализацию, управление товарами, скидки, промокоды, авторизацию через Members, восстановление потерянных корзин, отрисовку UI (иконка, sidebar, fullscreen), работу с формой заказа, доставку и сетевое взаимодействие с Tilda Store API. ~42% файла занимают Babel runtime helpers.
+
+---
+
+## Top-level Inventory
+
+### IIFE / Модули
+
+| Type | Name | Line |
+|------|------|------|
+| IIFE | `t_cart__useRootZone` | 3836 |
+| IIFE (enum) | `TCartServerLocation` | 3854 |
+| IIFE (enum) | `RequestDataFormat` | 4043 |
+| IIFE (enum) | `ResponseDataFormat` | 4052 |
+| IIFE | `t_store__useTranslation` | 4394 |
+| IIFE | `t_cart__loadDiscountsHook` | 4940 |
+
+### Основные переменные
+
+| Name | Line |
+|------|------|
+| `id`, `REACT_ELEMENT_TYPE`, `applyDecs2203Impl` | 436 |
+| `parseResponse` | 3883 |
+| `fetchWithRedirectHandling` | 3919 |
+| `t_store__fetchApiData` | 3941 |
+| `t_store__fetchData` | 3975 |
+| `enTranslation` + компоненты | 4153–4275 |
+| `ruTranslation` + компоненты | 4276–4392 |
+| `TCART_TRANSLATION_*`, `T_CART_*` | 4393–4420 |
+| `T_CART_PRELOADED_LANGS` | 4421 |
+| `t_cart__loadLkpSettings` | 4471 |
+| `t_cart__loadProductsInfoById` | 4509 |
+| `t_cart__loadProductsPrices` | 4562 |
+| `LS_ERROR_TEXT` | 4616 |
+| `t_cart__loadLastOrderFields` | 4734 |
+| `t_cart__loadLastDeliveries` | 4782 |
+| `T_STORE_USE_EXTERNAL_FUNCTION_TIMEOUT` | 4814 |
+| `t_store__useExternalFunction` | 4814 |
+| `t_store__useExternalCSSFile` | 4835 |
+| `t_store__useExternalJsFile` | 4845 |
+| `t_cart__loadMembersSettings` | 4896 |
+| `t_cart__loadDiscountsScript` | 5034 |
+| `DISCOUNTS_FILE_NAME` … константы | 5055–5063 |
+| `t_catalog__getStaticHost` | 5063 |
+| `t_cart__loadСountryСodes` | 5107 |
+| `tcart__loadDiscounts` | 5147 |
+| `tcart__getProductsInfoById` | 5212 |
+| `tcart__updateProductsPrice` | 5265 |
+| `tcart__auth__getMembersSettings` | 5383 |
+| `tcart__initAuthAndDelivery` | 5392 |
+| `tcart__init` | 5480 |
+
+### Основные функции (function declarations)
+
+| Name | Line |
+|------|------|
+| `t_cart__getServerName` | 3859 |
+| `t_cart__getServer2Name` | 3863 |
+| `t_cart__getStoreEndpointUrl` | 3867 |
+| `t_cart__getStore2EndpointUrl` | 3871 |
+| `determineContentType` | 4062 |
+| `getQueryString` | 4076 |
+| `handleRootzoneRedirect` | 4100 |
+| `t_cart__loadCartData` | 4602 |
+| `t_cart__getDataFromLS` | 4608 |
+| `t_cart__saveCartDataToLS` | 4616 |
+| `t_cart__createDefaultCartData` | 4632 |
+| `t_cart__isCartExpired` | 4650 |
+| `t_cart__cleanCartProducts` | 4663 |
+| `t_cart__getPageSettings` | 4677 |
+| `t_cart__applyPageSettings` | 4695 |
+| `t_cart__createTimestamp` | 4710 |
+| `t_cart__getMembersToken` | 4713 |
+| `tcart__loadLocalObj` | 5876 |
+| `tcart__saveLocalObj` | 5890 |
+| `tcart__syncProductsObject__LStoObj` | 5897 |
+| `tcart__addEvents` | 5922 |
+| `tcart__addEvent__links` | 6027 |
+| `tcart__auth__init` | 6417 |
+| `tcart__auth__createWrapEl` | 6473 |
+| `tcart__auth__insertAuthEl` | 6477 |
+| `tcart__auth__createAuthEl` | 6487 |
+| `tcart__auth__createLoggedInEl` | 6513 |
+| `tcart__auth__onMembersLogout` | 6556 |
+| `tcart__auth__getMauser` | 6578 |
+| `tcart__auth__getMauserFromLS` | 6592 |
+| `tcart__auth__getUserFields` | 6601 |
+| `tcart__auth__fillUserFields` | 6655 |
+| `tcart__auth__clearUserFields` | 6670 |
+| `tcart__addProduct` | 6679 |
+| `tcart__updateMinimals` | 5813 |
+| `tcart__nullObj` | 5804 |
+| `tcart_dict` | 5800 |
+| `tcart__updateTotalProductsinCartObj` | 6902 |
+| `tcart__reDrawCartIcon` | 6955 |
+| `tcart__shouldShowCartIcon` | 6993 |
+| `tcart__openCart` | 7008 |
+| `tcart__reDrawProducts` | 7041 |
+| `tcart__lumaRgb` | 7187 |
+| `tcart_isZeroBecauseOfDiscount` | 7196 |
+| `tcart__reDrawTotal` | 7203 |
+| `tcart_hasDiscount` | 7290 |
+| `tcart_reDrawCartIcon` | 7296 |
+| `tcart_reDrawCartTotal` | 7311 |
+| `tcart_reDrawSidebarTotal` | 7328 |
+| `tcart__drawTotalAmountInfo` | 7367 |
+| `tcart__createTotalAmountListMarkup` | 7381 |
+| `tcart__toggleTotalAmountVisibility` | 7392 |
+| `tcart__toggleProdAmountVisibility` | 7430 |
+| `tcart__changeSubmitStatus` | 7440 |
+| `tcart__addEvents__forProducts` | 7516 |
+| `tcart__getLostCart` | 7592 |
+| `tcart__clearLostCartUrl` | 7624 |
+| `tcart__restoreLostCart` | 7632 |
+| `tcart__saveRestoredProducts` | 7669 |
+| `tcart__openRestoredCart` | 7675 |
+| `tcart__form__getForm` | 7680 |
+| `tcart__form__getDeliveryWrapper` | 7683 |
+| `tcart__form__getFields` | 7690 |
+| `tcart__form__disableFormFields` | 7695 |
+| `tcart__form__hideFormFields` | 7701 |
+| `tcart__form__hideErrors` | 7707 |
+| `tcart__form__showFormFields` | 7712 |
+| `tcart__form__insertValidateRule` | 7718 |
+| `tcart__fillRestoredCartForm` | 7730 |
+| `tcart__showClearCartDialog` | 7805 |
+| `tcart__showWrongOrderPopup` | 7824 |
+| `tcart__keyUpFunc` | 7848 |
+| `tcart__blockSubmitButton` | 7854 |
+| `tcart__unblockSubmitButton` | 7860 |
+| `tcart__blockAndDelayUnblockSubmitOnResponse` | 7865 |
+| `tcart__blockCartUI` | 7871 |
+| `tcart__unblockCartUI` | 7879 |
+| `tcart__blockSidebarContinueButton` | 7887 |
+| `tcart__unblockSidebarContinueButton` | 7897 |
+| `tcart__product__plus` | 7907 |
+| `tcart__product__minus` | 7942 |
+| `tcart__product__del` | 7971 |
+| `tcart__product__editquantity` | 8137 |
+| `tcart__product__updateQuantity` | 8165 |
+| `tcart__delZeroquantity_inCartObj` | 8199 |
+| `tcart__createBottomTotalAmountMarkup` | 8210 |
+| `tcart__drawBottomTotalAmount` | 8226 |
+| `tcart__hideBottomTotalAmount` | 8255 |
+| `tcart__addDelivery` | 8259 |
+| `tcart__updateDelivery` | 8281 |
+| `tcart__processDelivery` | 8298 |
+| `tcart__setFreeDeliveryThreshold` | 8316 |
+| `tcart__addEvent__selectpayment` | 8333 |
+| `tcart__escapeHtml` | 8364 |
+| `tcart__escapeHtmlImg` | 8375 |
+| `tcart__cleanPrice` | 8385 |
+| `tcart__roundPrice` | 8398 |
+| `tcart__showWeight` | 8409 |
+| `tcart__showPrice` | 8448 |
+| `tcart__clearProdUrl` | 8515 |
+| `tcart__onFuncLoad` | 8549 |
+| `tcart_fadeOut` | 8569 |
+| `tcart_fadeIn` | 8584 |
+| `tcart__isEmptyObject` | 8601 |
+| `tcart__openCartFullscreen` | 8605 |
+| `tcart__closeCartFullscreen` | 8671 |
+| `tcart__openCartSidebar` | 8706 |
+| `tcart__closeCartSidebar` | 8738 |
+| `tcart__initDelivery` | 8764 |
+| `tcart__addDiscountInfo` | 8781 |
+| `tcart__calcPromocode` | 8842 |
+| `tcart_ceil` | 8925 |
+| `tcart__showBubble` | 8929 |
+| `tcart__closeBubble` | 8963 |
+| `tcart__decodeHtml` | 8980 |
+| `tcart__updateLazyload` | 8984 |
+| `t706_onSuccessCallback` | 8997 |
+| `t706_slideUp` | 9012 |
+| `t_triggerEvent` | 9021 |
+| `tcart__getRootZone` | 9050 |
+| `tcart__isAuthorized` | 9053 |
+| `tcart__getLkpSettings` | 9061 |
+| `tcart__getSubtotalDiscount` | 9065 |
+| `tcart__debounce` | 9068 |
+
+### Babel runtime helpers (~100 функций, строки 1–3835)
+
+`_OverloadYield`, `_applyDecoratedDescriptor`, `_applyDecs2311`, `_arrayLikeToArray`, `_arrayWithHoles`, `_arrayWithoutHoles`, `_assertClassBrand`, `_assertThisInitialized`, `_asyncGeneratorDelegate`, `_asyncIterator`, `AsyncFromSyncIterator`, `asyncGeneratorStep`, `_asyncToGenerator`, `_awaitAsyncGenerator`, `_callSuper`, `_checkInRHS`, `_checkPrivateRedeclaration`, `_classCallCheck`, `_classNameTDZError`, `_classPrivateField*`, `_construct`, `_defineProperties`, `_createClass`, `_createForOfIteratorHelper`, `_extends`, `_getPrototypeOf`, `_inherits`, `_isNativeReflectConstruct`, `_iterableToArray`, `_iterableToArrayLimit`, `_nonIterableRest`, `_nonIterableSpread`, `_objectSpread2`, `_possibleConstructorReturn`, `_regeneratorRuntime`, `_setFunctionName`, `_setPrototypeOf`, `_slicedToArray`, `_toConsumableArray`, `_typeof`, `_unsupportedIterableToArray`, `_wrapNativeSuper`, `_wrapRegExp`, `_AwaitValue`, `_applyDecs*`, `_dispose`, `_using`, и др.
+
+---
+
+## Groups
+
+### 🌐 Сетевая инфраструктура и API
+**Responsibility:** HTTP-запросы к Tilda Store API, управление серверными URL, обработка редиректов между TLD-зонами.
+
+**Contains:** `t_cart__getServerName`, `t_cart__getServer2Name`, `t_cart__getStoreEndpointUrl`, `t_cart__getStore2EndpointUrl`, `parseResponse`, `fetchWithRedirectHandling`, `t_store__fetchApiData`, `t_store__fetchData`, `determineContentType`, `getQueryString`, `handleRootzoneRedirect`, `RequestDataFormat`, `ResponseDataFormat`, `t_cart__useRootZone`, `TCartServerLocation`
+
+**Dependencies:** DOM (для чтения `data-tilda-root-zone`), `fetch` API, `Promise`
+**Side effects:** Сеть (HTTP-запросы), globals (`window`)
+
+---
+
+### 🌍 Переводы / i18n
+**Responsibility:** Локализация интерфейса корзины (английский, русский + динамическая загрузка других языков).
+
+**Contains:** `t_store__useTranslation`, `tcart_dict`, `t_store__createTranslationUrlPathname`, `t_store__createTranslationUrl`, `t_store__createFallbackTranslationUrl`, `t_store__getPreloadedLang`, `t_store__sendTranslationRequest`, `t_store__isAvailableLang`, `enTranslation`, `ruTranslation`, `TCART_TRANSLATION_*`, `T_CART_PRELOADED_LANGS`
+
+**Dependencies:** Сетевой слой (загрузка переводов с CDN)
+**Side effects:** Сеть (CDN-запросы при отсутствии предзагруженного языка)
+
+---
+
+### 💾 Данные корзины (localStorage)
+**Responsibility:** CRUD операции с данными корзины в localStorage, сериализация/десериализация, проверка актуальности.
+
+**Contains:** `t_cart__loadCartData`, `t_cart__getDataFromLS`, `t_cart__saveCartDataToLS`, `t_cart__createDefaultCartData`, `t_cart__isCartExpired`, `t_cart__cleanCartProducts`, `t_cart__getPageSettings`, `t_cart__applyPageSettings`, `t_cart__createTimestamp`, `tcart__loadLocalObj`, `tcart__saveLocalObj`, `tcart__syncProductsObject__LStoObj`
+
+**Dependencies:** DOM (чтение настроек из `#allrecords`), `window.tcart`
+**Side effects:** localStorage (чтение/запись `tcart`), globals (`window.tcart`)
+
+---
+
+### 🛒 Управление товарами
+**Responsibility:** Добавление, удаление, изменение количества товаров, пересчёт сумм, проверка лимитов и SKU.
+
+**Contains:** `tcart__addProduct`, `tcart__product__plus`, `tcart__product__minus`, `tcart__product__del`, `tcart__product__editquantity`, `tcart__product__updateQuantity`, `tcart__delZeroquantity_inCartObj`, `tcart__updateTotalProductsinCartObj`, `tcart__updateProductsPrice`, `t_cart__loadProductsInfoById`, `t_cart__loadProductsPrices`
+
+**Dependencies:** localStorage (чтение/запись корзины), API (обновление цен), UI-отрисовка
+**Side effects:** DOM (перерисовка корзины), localStorage, globals (`window.tcart`), сеть (обновление цен каждые 3ч)
+
+---
+
+### 🎨 Отрисовка UI корзины
+**Responsibility:** Визуальное отображение корзины: иконка, список товаров, итоги, суммы, скидки.
+
+**Contains:** `tcart__reDrawCartIcon`, `tcart__shouldShowCartIcon`, `tcart__reDrawProducts`, `tcart__reDrawTotal`, `tcart__lumaRgb`, `tcart_isZeroBecauseOfDiscount`, `tcart_hasDiscount`, `tcart_reDrawCartIcon`, `tcart_reDrawCartTotal`, `tcart_reDrawSidebarTotal`, `tcart__drawTotalAmountInfo`, `tcart__createTotalAmountListMarkup`, `tcart__toggleTotalAmountVisibility`, `tcart__toggleProdAmountVisibility`, `tcart__createBottomTotalAmountMarkup`, `tcart__drawBottomTotalAmount`, `tcart__hideBottomTotalAmount`, `tcart__updateMinimals`, `tcart__updateLazyload`, `tcart__showBubble`, `tcart__closeBubble`
+
+**Dependencies:** `window.tcart` (данные корзины), переводы (`tcart_dict`), утилиты цен (`tcart__showPrice`)
+**Side effects:** DOM (создание/обновление/удаление элементов)
+
+---
+
+### 🪟 Открытие/Закрытие корзины
+**Responsibility:** Управление визуальными режимами корзины: sidebar, fullscreen, modal; блокировка прокрутки.
+
+**Contains:** `tcart__openCart`, `tcart__closeCart`, `tcart__openCartFullscreen`, `tcart__closeCartFullscreen`, `tcart__openCartSidebar`, `tcart__closeCartSidebar`, `tcart__lockScroll`, `tcart__unlockScroll`, `tcart__keyUpFunc`
+
+**Dependencies:** UI-отрисовка, DOM (классы body), утилиты (`tcart_fadeIn`, `tcart_fadeOut`)
+**Side effects:** DOM (классы на `body`, `document`), globals (`window.tcart`)
+
+---
+
+### 🔐 Авторизация (Members)
+**Responsibility:** Интеграция с Tilda Members: логин, регистрация, автозаполнение полей пользователя, выход.
+
+**Contains:** `tcart__auth__init`, `tcart__auth__createWrapEl`, `tcart__auth__insertAuthEl`, `tcart__auth__createAuthEl`, `tcart__auth__createLoggedInEl`, `tcart__auth__onMembersLogout`, `tcart__auth__getMauser`, `tcart__auth__getMauserFromLS`, `tcart__auth__getUserFields`, `tcart__auth__fillUserFields`, `tcart__auth__clearUserFields`, `tcart__isAuthorized`, `tcart__initAuthAndDelivery`, `t_cart__loadMembersSettings`
+
+**Dependencies:** API (`t_cart__loadMembersSettings`), localStorage (токен пользователя), DOM (форма)
+**Side effects:** DOM (создание формы логина/регистрации), localStorage, globals (`window.mauser`)
+
+---
+
+### 📦 Доставка
+**Responsibility:** Инициализация модуля доставки, добавление/обновление данных доставки, порог бесплатной доставки.
+
+**Contains:** `tcart__initDelivery`, `tcart__addDelivery`, `tcart__updateDelivery`, `tcart__processDelivery`, `tcart__setFreeDeliveryThreshold`, `t_cart__loadDeliveryAssets`, `t_cart__loadСountryСodes`, `tcart__form__isDeliveryServicesActive`
+
+**Dependencies:** Внешние скрипты (`tilda-delivery-1.0`), localStorage
+**Side effects:** DOM (вставка скриптов/CSS), сеть (загрузка delivery assets), globals (`window.tcart_newDelivery`)
+
+---
+
+### 🏷️ Скидки и промокоды
+**Responsibility:** Загрузка, расчёт и отображение скидок и промокодов.
+
+**Contains:** `t_cart__loadDiscountsHook`, `tcart__loadDiscounts`, `tcart__addDiscountInfo`, `tcart__calcPromocode`, `tcart_ceil`, `tcart__getSubtotalDiscount`
+
+**Dependencies:** API (загрузка скидок), localStorage, утилиты цен
+**Side effects:** localStorage (кеш скидок), DOM (отрисовка инфо о скидках)
+
+---
+
+### 📋 Форма заказа
+**Responsibility:** Управление формой заказа: валидация, блокировка/разблокировка полей, кнопка отправки.
+
+**Contains:** `tcart__form__getForm`, `tcart__form__getFields`, `tcart__form__disableFormFields`, `tcart__form__hideFormFields`, `tcart__form__hideErrors`, `tcart__form__showFormFields`, `tcart__form__insertValidateRule`, `tcart__handleSaveFieldsOnCheckout`, `tcart__handleSubmitButton`, `tcart__saveFieldsOnCheckout`, `tcart__fillRestoredCartForm`, `tcart__blockSubmitButton`, `tcart__unblockSubmitButton`, `tcart__blockAndDelayUnblockSubmitOnResponse`, `tcart__blockCartUI`, `tcart__unblockCartUI`, `tcart__blockSidebarContinueButton`, `tcart__unblockSidebarContinueButton`, `tcart__changeSubmitStatus`
+
+**Dependencies:** DOM (элементы формы)
+**Side effects:** DOM (модификация формы, блокировка кнопок), timers (3с задержка разблокировки)
+
+---
+
+### 🔄 Восстановление корзины (Lost Cart)
+**Responsibility:** Восстановление потерянной корзины по URL `#!/torder/...`, диалог «очистить/добавить».
+
+**Contains:** `tcart__getLostCart`, `tcart__clearLostCartUrl`, `tcart__restoreLostCart`, `tcart__saveRestoredProducts`, `tcart__openRestoredCart`, `tcart__showClearCartDialog`, `tcart__showWrongOrderPopup`, `tcart__getProductsInfoById`, `t_cart__loadRestoreFieldsScript`, `t_cart__loadLostCartStyles`
+
+**Dependencies:** API (`tcart__getProductsInfoById`), UI-отрисовка, localStorage
+**Side effects:** DOM (диалоги), сеть (API-запросы), URL (очистка хеша), localStorage
+
+---
+
+### 🎯 Обработка событий
+**Responsibility:** Навешивание и обработка кликов по кнопкам `#order`, +/-/del, выбор оплаты, Escape.
+
+**Contains:** `tcart__addEvents`, `tcart__addEvent__links`, `tcart__addEvents__forProducts`, `tcart__addEvent__selectpayment`, `tcart__keyUpFunc`
+
+**Dependencies:** Управление товарами, UI, форма заказа
+**Side effects:** DOM (event listeners на `document`, кнопки, ссылки)
+
+---
+
+### 🔧 Утилиты
+**Responsibility:** Общие вспомогательные функции: форматирование, экранирование, анимации, debounce.
+
+**Contains:** `tcart__escapeHtml`, `tcart__escapeHtmlImg`, `tcart__cleanPrice`, `tcart__roundPrice`, `tcart__showWeight`, `tcart__showPrice`, `tcart__nullObj`, `tcart__isEmptyObject`, `tcart__clearProdUrl`, `tcart__onFuncLoad`, `tcart_fadeOut`, `tcart_fadeIn`, `tcart__decodeHtml`, `tcart__debounce`, `tcart__getRootZone`, `tcart__getLkpSettings`, `t_triggerEvent`, `t706_onSuccessCallback`, `t706_slideUp`
+
+**Dependencies:** нет внешних
+**Side effects:** нет
+
+---
+
+### ⚙️ Загрузка внешних ресурсов
+**Responsibility:** Динамическая загрузка CSS/JS файлов и ожидание готовности глобальных функций.
+
+**Contains:** `t_store__useExternalFunction`, `t_store__useExternalCSSFile`, `t_store__useExternalJsFile`, `t_catalog__getStaticHost`
+
+**Dependencies:** DOM (`<script>`, `<link>`)
+**Side effects:** DOM (вставка `<script>`, `<link>`), timers (polling)
+
+---
+
+## ⚠️ Unclear / Needs Review
+
+1. **`tcart__addEvent__links` (~400 строк)** — слишком длинная функция, обрабатывающая клики по `#order` ссылкам. Внутри может быть сложная логика маршрутизации, которая требует детальной трассировки.
+2. **`tcart__init`** — главная точка входа, но её точная последовательность вызовов не полностью трассирована (зависит от множества условий: авторизация, доставка, скидки, lost cart).
+3. **`tcart__updateTotalProductsinCartObj`** — пересчёт сумм корзины, может содержать нетривиальную логику промокодов/скидок.
+4. **Опечатка**: `t_cart__loadСountryСodes` — кириллические «С» вместо латинских «C» в имени функции.
+5. **Глобальное состояние**: `window.tcart` используется повсеместно как глобальный стейт — нет модульной инкапсуляции.
+6. **Взаимодействие с внешними модулями**: ожидание загрузки `tcart__calcAmountWithDiscounts`, `tcart_newDelivery`, `tcart__restoreFields` через `t_store__useExternalFunction` — фактическое поведение зависит от внешних скриптов.
+# Code Map: tdelivery.js
+
+## Module Overview
+
+Файл tdelivery.js (9407 строк) — скомпилированный Babel-бандл модуля **доставки** платформы Tilda. Ядром является объект `tcart_newDelivery` (~3300 строк), реализующий полный цикл оформления доставки: геолокация, автокомплит адресов через API, интеграция с Яндекс Картами, расчёт стоимости, выбор пунктов выдачи, сохранение/восстановление адресов. ~40% файла занимают Babel runtime helpers.
+
+---
+
+## Top-level Inventory
+
+### IIFE / Модули
+
+| Type | Name | Line |
+|------|------|------|
+| IIFE | `t_cart__useRootZone` | 1 |
+| IIFE (enum) | `TCartServerLocation` | 20 |
+| IIFE | `t_store__useTranslation` | 4457 |
+| IIFE (class) | `DeliveryAvailableCountries` | 5147 |
+| IIFE (object) | `tcart_newDelivery` | 5268 |
+| IIFE (class) | `TCartSelect` | 9294 |
+
+### Классы
+
+| Name | Line |
+|------|------|
+| `DeliveryAvailableCountries` (Singleton) | 5147–5267 |
+| `TCartSelect` (кастомный dropdown) | 9294–9407 |
+
+### Основные переменные
+
+| Name | Line |
+|------|------|
+| `parseResponse` | 3883 |
+| `fetchWithRedirectHandling` | 3908 |
+| `t_store__fetchApiData` | 3927 |
+| `t_store__fetchData` | 3957 |
+| `RequestDataFormat` | 4017 |
+| `ResponseDataFormat` | 4024 |
+| `t_cart__loadLastDeliveries` | 4125 |
+| `enTranslation` + компоненты | 4166–4232 |
+| `ruTranslation` + компоненты | 4273–4339 |
+| `TCART_TRANSLATION_*`, `T_CART_*` | 4370–4400 |
+| `T_CART_PRELOADED_LANGS` | 4401 |
+| `t_cart__loadLkpSettings` | 4534 |
+| `t_cart__loadProductsInfoById` | 4572 |
+| `t_cart__loadProductsPrices` | 4625 |
+| `LS_ERROR_TEXT` | 4652 |
+| `t_cart__loadLastOrderFields` | 4773 |
+| `T_STORE_USE_EXTERNAL_FUNCTION_TIMEOUT` | 4833 |
+| `t_store__useExternalCSSFile` | 4835 |
+| `t_store__useExternalJsFile` | 4872 |
+| `t_cart__loadMembersSettings` | 4896 |
+| `t_cart__loadDiscountsScript` | 5034 |
+| `DISCOUNTS_FILE_NAME` … константы | 5046–5054 |
+| `t_catalog__getStaticHost` | 5061 |
+| `t_cart__loadСountryСodes` | 5107 |
+| `DeliveryAvailableCountries` | 5147 |
+| `tcart_newDelivery` | 5268 |
+| `TCartSelect` | 9294 |
+
+### Основные функции
+
+| Name | Line |
+|------|------|
+| `t_cart__getServerName` | 24 |
+| `t_cart__getServer2Name` | 28 |
+| `t_cart__getStoreEndpointUrl` | 3853 |
+| `t_cart__getStore2EndpointUrl` | 3857 |
+| `determineContentType` | 4031 |
+| `getQueryString` | 4045 |
+| `handleRootzoneRedirect` | 4064 |
+| `t_cart__getMauser` | 4093 |
+| `t_cart__getMembersToken` | 4104 |
+| `t_cart__createProductInfoResponseStub` | 4565 |
+| `t_cart__checkProduct` | 4622 |
+| `t_cart__loadCartData` | 4654 |
+| `t_cart__getDataFromLS` | 4660 |
+| `t_cart__saveCartDataToLS` | 4668 |
+| `t_cart__createDefaultCartData` | 4684 |
+| `t_cart__isCartExpired` | 4702 |
+| `t_cart__cleanCartProducts` | 4715 |
+| `t_cart__getPageSettings` | 4729 |
+| `t_cart__applyPageSettings` | 4747 |
+| `t_cart__createTimestamp` | 4762 |
+| `t_cart__loadDiscountsHook` | 4940 |
+| `t_cart__loadDeliveryAssets` | 5064 |
+| `t_cart__loadRestoreFieldsScript` | 5074 |
+| `t_cart__loadLostCartStyles` | 5081 |
+| `t_cart__loadFullscreenStyles` | 5087 |
+| `t_cart__loadWidgetPositionsScript` | 5093 |
+| `t_delivery__dict` | 8575 |
+| `t_delivery__declensionOfNumber` | 9094 |
+| `t_delivery__showPrice` | 9099 |
+| `t_delivery__getDeliveryInputByKey` | 9118 |
+| `t_triggerEvent` | 9134 |
+| `t_delivery__replaceUnicode` | 9138 |
+| `t_delivery__loadJSFile` | 9157 |
+| `t_delivery__getRootZone` | 9170 |
+
+### Глобальные объекты, записываемые в `window`
+
+| Name | Line |
+|------|------|
+| `window.tcart__errorHandler` | 9174 |
+| `window.tcart__inputErrorHandler` | 9199 |
+| `window.t_delivery__autocompleteFields` | 9212 |
+| `window.t_delivery__lang` | 9231 |
+| `window.tcart__preloader` | 9246 |
+| `window.tcart__chosePointOnMap` | ~6080 |
+| `window.tcart_newDeliveryActive` | 5314 |
+| `window.t_delivery__map` | ~5974 |
+
+### Babel runtime helpers (~130 функций, строки 32–3852)
+
+`_OverloadYield`, `_applyDecoratedDescriptor`, `_applyDecs2311`, `_regeneratorRuntime`, `_classCallCheck`, `_createClass`, `_extends`, `_objectSpread2`, `_wrapRegExp`, `_dispose`, `_using`, и др.
+
+---
+
+## Groups
+
+### 🌐 Сетевая инфраструктура и API
+**Responsibility:** HTTP-запросы к Tilda Store API, управление серверными URL, обработка редиректов между TLD-зонами, парсинг ответов.
+
+**Contains:** `t_cart__getServerName`, `t_cart__getServer2Name`, `t_cart__getStoreEndpointUrl`, `t_cart__getStore2EndpointUrl`, `parseResponse`, `fetchWithRedirectHandling`, `t_store__fetchApiData`, `t_store__fetchData`, `determineContentType`, `getQueryString`, `handleRootzoneRedirect`, `RequestDataFormat`, `ResponseDataFormat`
+
+**Dependencies:** DOM (`data-tilda-root-zone`), `fetch` API
+**Side effects:** Сеть (HTTP), globals (`window`)
+
+---
+
+### 🌍 Переводы / i18n
+**Responsibility:** Локализация интерфейса доставки на 13+ языков.
+
+**Contains:** `t_store__useTranslation`, `t_delivery__dict`, `enTranslation`, `ruTranslation`, `T_CART_PRELOADED_LANGS`, константы перевода
+
+**Dependencies:** Сетевой слой (CDN)
+**Side effects:** Сеть (загрузка переводов)
+
+---
+
+### 💾 Данные корзины (общие утилиты)
+**Responsibility:** Общие для корзины и доставки утилиты работы с localStorage и данными.
+
+**Contains:** `t_cart__loadCartData`, `t_cart__getDataFromLS`, `t_cart__saveCartDataToLS`, `t_cart__createDefaultCartData`, `t_cart__isCartExpired`, `t_cart__cleanCartProducts`, `t_cart__getPageSettings`, `t_cart__applyPageSettings`, `t_cart__createTimestamp`, `t_cart__loadLkpSettings`, `t_cart__loadProductsInfoById`, `t_cart__loadProductsPrices`, `t_cart__loadLastOrderFields`, `t_cart__loadLastDeliveries`
+
+**Dependencies:** API, localStorage, DOM
+**Side effects:** localStorage, globals (`window.tcart`)
+
+---
+
+### 📦 Ядро доставки — `tcart_newDelivery`
+**Responsibility:** Полный движок доставки: геолокация, автокомплит адресов, Яндекс Карты, расчёт стоимости, пункты выдачи, сохранение адресов.
+
+**Contains:** объект `tcart_newDelivery` с методами:
+
+- **Инициализация:** `init`, `updateProjectId`
+- **Город:** `setCityState`, `setCityInput`, `getCityFromGeo`, `getCityFromGeoWithFailHandler`, `getCityCoordinates`
+- **Восстановление:** `restoreFromLastOrder`, `restoreFromLS`, `restoreTcartDelivery`, `saveDelivery`, `saveTcartDelivery`, `renderSavedAddressesSelect`
+- **API:** `getServices`, `getPayTypes`, `getPickupList`, `getDeliveryPrice`, `getAddresses`, `changeEndpoint`, `updateDeliveryPrice`
+- **UI:** `renderRegionFields`, `renderAddressFields`, `renderServices`, `renderFullAddressNode`, `createInput`, `createRadio`, `createTitle`, `createSelect`, `createSearchbox`, `fillSearchList`, `setPostalCodeInput`, `setHashInput`, `setFullAddress`, `getFullAddress`, `getFullAddressHtml`
+- **Яндекс Карты:** `mapAppendScript`, `mapInit`, `mapAddPoints`
+- **Searchbox:** `searchboxInit`, `clickSearchboxInputHandler`, `changeSearchboxInputHandler`, `choseSearchListItemHandler`, `focusoutSearchboxInputHandler`
+- **События:** `changeDeliveryTypeListener`, `changeCartInputsHandler`, `onAddressChange`, `changePickupHandler`, `hidePaymentMethod`
+- **Утилиты:** `getInputFields`, `getInputValues`, `hideFieldsErrors`, `disableChoseServiceControls`, `enableChoseServiceControls`, `clearDeliveryFields`, `clearHouseInput`, `clearAddressSelect`, `updateTotal`, `showPickupInfo`, `hidePickupInfo`
+
+**Dependencies:** API (geoservice, delivery endpoints), Яндекс Карты API, localStorage, DOM, `DeliveryAvailableCountries`, `TCartSelect`
+**Side effects:** DOM (массовое создание элементов), сеть (API геолокации, доставки, Яндекс Карты), localStorage, sessionStorage, globals (`window.t_delivery__map`, `window.tcart__chosePointOnMap`, `window.tcart_newDeliveryActive`, `window.savedAddressesSelect`), timers (debounce на searchbox)
+
+---
+
+### 🗺 DeliveryAvailableCountries (Singleton)
+**Responsibility:** Кеширование и проверка доступных стран доставки с TTL 24 часа.
+
+**Contains:** `DeliveryAvailableCountries` — `getInstance()`, `onStateChange()`, `checkAvailableCountries()`, геттер `state`
+
+**Dependencies:** API (загрузка стран), localStorage
+**Side effects:** localStorage (кеш стран), сеть (API-запрос при отсутствии кеша)
+
+---
+
+### 🎨 UI-компоненты
+**Responsibility:** Кастомные UI-элементы для доставки.
+
+**Contains:** `TCartSelect` (кастомный dropdown select: `init`, `setValue`, `getValue`, `onChange`, `openDropdown`, `closeDropdown`)
+
+**Dependencies:** DOM
+**Side effects:** DOM (создание/модификация элементов), event listeners
+
+---
+
+### 🔧 Утилиты
+**Responsibility:** Общие вспомогательные функции для модуля доставки.
+
+**Contains:** `t_delivery__declensionOfNumber`, `t_delivery__showPrice`, `t_delivery__getDeliveryInputByKey`, `t_triggerEvent`, `t_delivery__replaceUnicode`, `t_delivery__loadJSFile`, `t_delivery__getRootZone`
+
+**Dependencies:** нет внешних
+**Side effects:** DOM (динамическая загрузка JS через `t_delivery__loadJSFile`)
+
+---
+
+### 🔧 Обработчики ошибок и автокомплит (window globals)
+**Responsibility:** Экспорт в глобальную область видимости для использования внешними модулями.
+
+**Contains:** `window.tcart__errorHandler`, `window.tcart__inputErrorHandler`, `window.t_delivery__autocompleteFields`, `window.t_delivery__lang`, `window.tcart__preloader`
+
+**Dependencies:** DOM
+**Side effects:** globals (`window.*`), DOM (отображение/скрытие ошибок)
+
+---
+
+## ⚠️ Unclear / Needs Review
+
+1. **`tcart_newDelivery` (~3300 строк)** — гигантский монолитный объект. Детальная трассировка всех ~60 методов не выполнена; точная последовательность вызовов при `init()` требует пошагового анализа.
+2. **`t_delivery__dict` (~500 строк)** — словарь на 13+ языков; точный список ключей и языков не полностью инвентаризирован.
+3. **`window.window.tcart__inputErrorHandler`** — двойной `window.window`, вероятно баг минификации.
+4. **Опечатка**: `t_cart__loadСountryСodes` — кириллические «С» вместо латинских «C».
+5. **Жёстко закодированные URL**: `delivery.tildacdn.com`, `geoserv{zone}/api/`, `geocode-maps.yandex.ru` — эндпоинты доставки.
+6. **Язык по умолчанию**: определяется через `window.t_delivery__browserLang` — должен быть установлен до загрузки скрипта; при отсутствии — поведение неясно.
+7. **Кеширование в sessionStorage**: гео-запросы кешируются с префиксом `"t"` — точный формат ключа и TTL неясны.
+8. **Взаимозависимость файлов**: tcart.js и tdelivery.js дублируют значительную часть кода (Babel helpers, сетевой слой, утилиты корзины). Неясно, загружаются ли они оба одновременно или взаимоисключающе.
+
+
+
+# Code Map: tdelivery.js ## Module Overview Файл tdelivery.js (9407 строк) — скомпилированный Babel-бандл модуля **доставки** платформы Tilda. Ядром является объект `tcart_newDelivery` (~3300 строк), реализующий полный цикл оформления доставки: геолокация, автокомплит адресов через API, интеграция
+
+pasted
+
+Мне нужно для доставки с именем Ozon до пвз переопределить метод получения пвз, чтобы он обращался к моему апи-ендпоинту, и напиши тестовый код, который это сделает даже без запроса, просто чтобы протестировать теорию, что тильда это примет
+
+2 апр.
+Смотрю на карту кода, чтобы понять что и где переопределять.
+
+По документу, tcart_newDelivery — это глобальный объект на window, а метод получения ПВЗ — getPickupList.
+
+Вот тестовый патч, который:
+
+Ждёт загрузки tcart_newDelivery
+Переопределяет getPickupList только для Ozon
+Возвращает заглушку — без реального запроса
+javascript
+(function patchOzonPickup() {
+  const POLL_INTERVAL = 200;
+  const MAX_ATTEMPTS = 50; // 10 секунд
+
+  let attempts = 0;
+
+  const interval = setInterval(() => {
+    attempts++;
+
+    if (attempts > MAX_ATTEMPTS) {
+      clearInterval(interval);
+      console.warn('[OzonPatch] tcart_newDelivery не появился за 10с');
+      return;
+    }
+
+    if (!window.tcart_newDelivery) return;
+
+    clearInterval(interval);
+    applyPatch(window.tcart_newDelivery);
+  }, POLL_INTERVAL);
+
+  function applyPatch(delivery) {
+    const original = delivery.getPickupList.bind(delivery);
+
+    delivery.getPickupList = function (params) {
+      // params — то, что Tilda передаёт внутри: обычно { service, city, ... }
+      // Смотрим, Ozon ли это
+      const serviceName = (params?.service ?? params?.type ?? '').toLowerCase();
+
+      if (!serviceName.includes('ozon')) {
+        // Не Ozon — пропускаем в оригинал
+        return original(params);
+      }
+
+      console.log('[OzonPatch] Перехвачен getPickupList для Ozon, params:', params);
+
+      // --- ЗАГЛУШКА ---
+      // Tilda ожидает Promise, который резолвится в массив точек.
+      // Формат точки взят из поведения tcart_newDelivery.mapAddPoints / renderServices
+      return Promise.resolve([
+        {
+          id: 'test-pvz-001',
+          name: 'Тестовый ПВЗ Ozon #1',
+          address: 'г. Ростов-на-Дону, ул. Пушкина, 1',
+          lat: 47.222078,
+          lng: 39.720358,
+          price: 0,
+          days: 3,
+        },
+        {
+          id: 'test-pvz-002',
+          name: 'Тестовый ПВЗ Ozon #2',
+          address: 'г. Ростов-на-Дону, пр. Ворошиловский, 50',
+          lat: 47.218978,
+          lng: 39.715200,
+          price: 99,
+          days: 2,
+        },
+      ]);
+    };
+
+    console.log('[OzonPatch] Патч применён ✓');
+  }
+})();
+Что здесь происходит по кускам:
+
+Polling вместо DOMContentLoaded — потому что tcart_newDelivery создаётся внутри IIFE в tdelivery.js, который грузится асинхронно после основного DOM. Ждём появления объекта на window.
+
+bind(delivery) перед переопределением — сохраняем this оригинального метода, иначе внутри него сломается контекст (там везде this.something).
+
+Проверка serviceName — params внутри getPickupList мне точно неизвестен без запуска (в карте кода он есть, но сигнатура не расписана). Поэтому я смотрю сразу несколько возможных полей. Запусти с console.log(params) и посмотри что реально приходит.
+
+Promise.resolve([...]) — getPickupList судя по архитектуре (async объект, сетевые вызовы) возвращает Promise. Заглушка его имитирует.
+
+Как тестировать:
+
+Вставь в консоль браузера на странице с корзиной Tilda
+Выбери доставку Ozon → ПВЗ
+Смотри в консоль: появится ли [OzonPatch] Перехвачен... и что в params
+Если Tilda упадёт с ошибкой — значит формат ответа не тот, и нужно будет подстроить структуру объектов в массиве под реальный формат. Это покажет стектрейс.
+
+напиши что тебе нужно, чтобы я запросил это у другой нейронки
+
+2 апр.
+Мне нужен реальный формат params в getPickupList и формат ответа, который Tilda ожидает.
+
+Попроси другую нейронку (или сам найди в коде) вот это:
+
+1. Сигнатура getPickupList В tdelivery.js найди метод getPickupList внутри объекта tcart_newDelivery (строки ~5268–8574). Нужно:
+
+Что передаётся в аргументах при вызове
+Что делается с результатом (then(...) / await — что достаётся из ответа)
+2. Метод mapAddPoints Он принимает список точек и рисует их на карте — по нему виден реальный формат объекта ПВЗ (какие поля обязательны).
+
+3. Кто вызывает getPickupList Найди все места где написано getPickupList( — нужно видеть контекст вызова и что делают с промисом.
+
+Если у тебя есть доступ к исходнику tdelivery.js — можешь просто скинуть мне эти ~50 строк вокруг getPickupList, я разберу сам.
+
+
+Окей, пишу подробнее текстом. ПАРАМЕТРЫ getPickupList: Функция принимает один объект с полями: projectId — ID проекта на Tilda (число) postalCode — почтовый индекс города (строка, может быть "0" если нет) deliveryId — идентификатор сервиса доставки, выбранный пользователем (строка типа "pickup" и
+
+pasted
+
+2 апр.
+Отлично, теперь всё понятно. Обновляю патч под реальный формат.
+
+javascript
+(function patchOzonPickup() {
+  const POLL_INTERVAL = 200;
+  const MAX_ATTEMPTS = 50;
+  let attempts = 0;
+
+  const interval = setInterval(() => {
+    attempts++;
+    if (attempts > MAX_ATTEMPTS) {
+      clearInterval(interval);
+      console.warn('[OzonPatch] tcart_newDelivery не появился за 10с');
+      return;
+    }
+    if (!window.tcart_newDelivery) return;
+    clearInterval(interval);
+    applyPatch(window.tcart_newDelivery);
+  }, POLL_INTERVAL);
+
+  // Заглушка — список ПВЗ без реального запроса
+  const FAKE_PICKUP_LIST = [
+    {
+      id: 'ozon-test-001',
+      name: 'Ozon ПВЗ Пушкина',
+      address: 'г. Ростов-на-Дону, ул. Пушкина, 1',
+      coordinates: [47.222078, 39.720358],
+      workTime: 'пн-вс: 09:00-21:00',
+      phones: ['+7 800 000 00 00'],
+      addressComment: 'Вход со двора',
+      cash: 'n',
+      postalCode: '344000',
+    },
+    {
+      id: 'ozon-test-002',
+      name: 'Ozon ПВЗ Ворошиловский',
+      address: 'г. Ростов-на-Дону, пр. Ворошиловский, 50',
+      coordinates: [47.218978, 39.715200],
+      workTime: 'пн-пт: 10:00-20:00, сб-вс: 11:00-18:00',
+      phones: ['+7 800 000 00 01'],
+      addressComment: '',
+      cash: 'y',
+      postalCode: '344000',
+    },
+  ];
+
+  function applyPatch(delivery) {
+    const original = delivery.getPickupList.bind(delivery);
+
+    delivery.getPickupList = function (params) {
+      const deliveryId = (params?.deliveryId ?? '').toLowerCase();
+
+      if (!deliveryId.includes('ozon')) {
+        return original(params);
+      }
+
+      console.log('[OzonPatch] Перехват getPickupList для Ozon, params:', params);
+
+      // Фильтруем заглушку по pattern, если он есть — имитируем поиск
+      const pattern = (params?.pattern ?? '').toLowerCase();
+      const result = pattern
+        ? FAKE_PICKUP_LIST.filter(p =>
+            p.name.toLowerCase().includes(pattern) ||
+            p.address.toLowerCase().includes(pattern)
+          )
+        : FAKE_PICKUP_LIST;
+
+      // Tilda использует колбэки, не Promise
+      if (typeof params.onDone === 'function') {
+        // setTimeout чтобы не быть синхронным — имитируем сеть
+        setTimeout(() => params.onDone(result), 50);
+      }
+    };
+
+    console.log('[OzonPatch] Патч применён ✓');
+  }
+})();
+Главное изменение относительно первой версии — три вещи:
+
+Колбэки вместо Promise — getPickupList не возвращает Promise, он принимает onDone/onFail в params и вызывает их сам. Первая версия была неправильной.
+
+deliveryId вместо service — теперь знаем точное имя поля, по которому фильтруем Ozon.
+
+Фильтрация по pattern — searchbox передаёт туда текст из поля поиска. Без этого при наборе текста список бы не менялся и выглядело бы сломанным.
+
+Когда будешь подключать реальный эндпоинт — замени содержимое setTimeout на:
+
+javascript
+setTimeout(() => {
+  fetch('/api/ozon-pickup', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+    .then(r => r.json())
+    .then(data => params.onDone(data))
+    .catch(() => params.onFail && params.onFail());
+}, 0);
+написало, что патч применен, но при этом результат все равно старый
+
+2 апр.
+Скорее всего проблема в одном из двух мест.
+
+Первое — проверь реальный deliveryId
+
+Вставь в консоль сразу после применения патча:
+
+javascript
+const orig = window.tcart_newDelivery.getPickupList.bind(window.tcart_newDelivery);
+window.tcart_newDelivery.getPickupList = function(params) {
+  console.log('[DEBUG] getPickupList params:', JSON.stringify(params));
+  return orig(params);
+};
+Выбери доставку Ozon в UI и посмотри что придёт в консоль — конкретно значение deliveryId. Скорее всего там не "ozon" а что-то вроде "pickup_123456" или вообще числовой ID.
+
+Второе — возможно getPickupList вызывается не напрямую
+
+По карте кода tcart_newDelivery — это IIFE, то есть методы внутри могут вызывать друг друга через локальную переменную, а не через this. В таком случае патч на window.tcart_newDelivery.getPickupList просто не перехватывается изнутри.
+
+Это можно проверить — после того как увидишь реальный deliveryId, скажи мне, и я скажу точнее что происходит.
+
+хуйни для всех доставок пока, похуй
+
+2 апр.
+javascript
+(function patchOzonPickup() {
+  const POLL_INTERVAL = 200;
+  const MAX_ATTEMPTS = 50;
+  let attempts = 0;
+
+  const interval = setInterval(() => {
+    attempts++;
+    if (attempts > MAX_ATTEMPTS) {
+      clearInterval(interval);
+      console.warn('[OzonPatch] tcart_newDelivery не появился за 10с');
+      return;
+    }
+    if (!window.tcart_newDelivery) return;
+    clearInterval(interval);
+    applyPatch(window.tcart_newDelivery);
+  }, POLL_INTERVAL);
+
+  const FAKE_PICKUP_LIST = [
+    {
+      id: 'ozon-test-001',
+      name: 'Ozon ПВЗ Пушкина',
+      address: 'г. Ростов-на-Дону, ул. Пушкина, 1',
+      coordinates: [47.222078, 39.720358],
+      workTime: 'пн-вс: 09:00-21:00',
+      phones: ['+7 800 000 00 00'],
+      addressComment: 'Вход со двора',
+      cash: 'n',
+      postalCode: '344000',
+    },
+    {
+      id: 'ozon-test-002',
+      name: 'Ozon ПВЗ Ворошиловский',
+      address: 'г. Ростов-на-Дону, пр. Ворошиловский, 50',
+      coordinates: [47.218978, 39.715200],
+      workTime: 'пн-пт: 10:00-20:00, сб-вс: 11:00-18:00',
+      phones: ['+7 800 000 00 01'],
+      addressComment: '',
+      cash: 'y',
+      postalCode: '344000',
+    },
+  ];
+
+  function applyPatch(delivery) {
+    delivery.getPickupList = function (params) {
+      console.log('[OzonPatch] getPickupList перехвачен, params:', params);
+
+      const pattern = (params?.pattern ?? '').toLowerCase();
+      const result = pattern
+        ? FAKE_PICKUP_LIST.filter(p =>
+            p.name.toLowerCase().includes(pattern) ||
+            p.address.toLowerCase().includes(pattern)
+          )
+        : FAKE_PICKUP_LIST;
+
+      if (typeof params.onDone === 'function') {
+        setTimeout(() => params.onDone(result), 50);
+      }
+    };
+
+    console.log('[OzonPatch] Патч применён ✓');
+  }
+})();
+Убрал проверку на deliveryId — теперь перехватывает вообще все вызовы. Если в консоли появится getPickupList перехвачен — значит метод всё-таки вызывается снаружи и мы на верном пути. Если тишина — значит внутри IIFE идёт вызов локальной копии и надо копать глубже.
+
+работает, прекрасно
+
+2 апр.
+Отлично! Значит метод вызывается снаружи через window.tcart_newDelivery — IIFE не замкнул его внутри.
+
+Теперь когда будешь подключать реальный эндпоинт — просто замени заглушку:
+
+javascript
+delivery.getPickupList = function (params) {
+  fetch('/api/your-endpoint', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      postalCode: params.postalCode,
+      deliveryId: params.deliveryId,
+      pattern: params.pattern ?? '',
+    }),
+  })
+    .then(r => r.json())
+    .then(data => params.onDone(data))
+    .catch(() => params.onFail && params.onFail());
+};
+Формат ответа твоего API должен быть массивом объектов с теми же полями что в заглушке — Tilda примет без изменений.
+
+
+Ozon Логистика Методы в разделе Ozon Логистика работают только через OAuth-токен в частном или публичном приложении. Причины отмены Причины отмены отправлений post /v1/cancel-reason/list Описание и примерыКонсоль Возвращает возможные причины отмены отправлений и заказов. Ответы 200Причины отмены
+
+pasted
+
+вот теперь мне нужно присрать озон логистику к этому. Пока в голове такой вариант - получать список всех пвз по координатам раз в сутки, потом пройтись по списку и получить более детальную информацию, закешировать, и переопределить метод доставки внутри тильды. Потом сделать апи ендпоинт, который будет подключен к форме тильды в админке, который будет принимать товары и прочее, и создавать заявку. Ну и check в корзине должен быть (поле формы есть). Напиши план реализации этой системы. Готова авторизация уже целиком, остались только вот эти методы доставки до пвз и до адреса с получением стоимости в самой тильде и просто апдейтом ее при обновлении корзины, ну и с запретом отправления, если check не проходит
+
+2 апр.
+План реализации
+Общая архитектура
+Tilda (frontend)          Твой бэкенд (Nuxt)           Ozon API
+─────────────────         ──────────────────           ─────────
+патч getPickupList   →    GET /api/ozon/pvz        →   /v1/delivery/point/list
+                     ←    (кэш 24ч, Redis/DB)      ←   /v1/delivery/point/info
+
+патч getDeliveryPrice →   POST /api/ozon/price     →   /v2/delivery/checkout
+                     ←    цена + сроки             ←
+
+submit формы         →    POST /api/ozon/order     →   /v2/order/create
+  (если check ok)    ←    order_number             ←
+
+check поле           →    POST /api/ozon/check     →   /v1/delivery/check
+                     ←    is_possible              ←
+Часть 1 — Бэкенд (Nuxt server routes)
+1.1 Кэш ПВЗ — фоновая задача, раз в сутки
+
+server/
+  tasks/
+    ozon-pvz-sync.ts       ← nitro scheduled task
+  utils/
+    ozon-client.ts         ← обёртка над Ozon API с OAuth
+    pvz-cache.ts           ← чтение/запись кэша (Redis или DB)
+Логика синхронизации:
+
+POST /v1/delivery/point/list → получаем все {map_point_id, coordinate}
+Батчами по 100 шт → POST /v1/delivery/point/info → детали каждой точки
+Маппим в формат Tilda (см. ниже) → сохраняем в кэш с TTL 24ч
+Маппинг Ozon → Tilda:
+
+ts
+// Ozon point.delivery_method → Tilda ПВЗ
+{
+  id: String(map_point_id),
+  name: name,
+  address: address,
+  coordinates: [coordinates.lat, coordinates.long],
+  workTime: working_hours → форматируем в строку,
+  phones: [],            // Ozon не отдаёт телефоны в point/info
+  addressComment: description,
+  cash: 'n',             // Ozon не принимает наличные
+  postalCode: '',        // нет в ответе, берём из города
+}
+1.2 Эндпоинты
+
+GET /api/ozon/pvz?postalCode=344000&pattern=
+
+Отдаёт из кэша, фильтрует по pattern если есть
+Если кэш пустой — триггерит синхронизацию и отдаёт пустой массив
+POST /api/ozon/price
+
+ts
+// body: { mapPointId, items, buyerPhone }
+// → /v2/delivery/checkout
+// ← { price, days } в формате который покажешь в Tilda
+POST /api/ozon/check
+
+ts
+// body: { phone }
+// → /v1/delivery/check
+// ← { is_possible }
+POST /api/ozon/order
+
+ts
+// body: всё что Tilda отправит в форму
+// валидация → /v1/delivery/check → если false, 400
+// → /v2/order/create
+// ← { order_number }
+Часть 2 — Патч Tilda
+Один скрипт, три переопределения:
+
+2.1 getPickupList — уже работает, меняем заглушку на реальный запрос:
+
+js
+fetch('/api/ozon/pvz?postalCode=' + params.postalCode + '&pattern=' + (params.pattern ?? ''))
+  .then(r => r.json())
+  .then(data => params.onDone(data))
+2.2 getDeliveryPrice — по аналогии с getPickupList, смотреть сигнатуру в tdelivery.js. Предположительно принимает {mapPointId, onDone, onFail}, дёргает /api/ozon/price
+
+2.3 Блокировка submit — вешаем на поле телефона blur-событие:
+
+js
+phoneInput.addEventListener('blur', async () => {
+  const res = await fetch('/api/ozon/check', {
+    method: 'POST',
+    body: JSON.stringify({ phone: phoneInput.value })
+  })
+  const { is_possible } = await res.json()
+  if (!is_possible) {
+    tcart__blockSubmitButton()  // уже есть в tcart.js
+    showError('Доставка Ozon недоступна для этого номера')
+  }
+})
+```
+
+---
+
+### Часть 3 — Защита на бэкенде
+
+Даже если кто-то обойдёт фронт — `/api/ozon/order` всегда сам вызывает `/v1/delivery/check` перед созданием заказа и возвращает 400 если `is_possible: false`.
+
+---
+
+### Порядок реализации
+```
+1. ozon-client.ts — OAuth + базовые запросы
+2. /v1/delivery/point/list + /info + маппинг
+3. GET /api/ozon/pvz + кэш
+4. Патч getPickupList → реальный запрос, проверяешь карту
+5. POST /api/ozon/price + патч getDeliveryPrice
+6. POST /api/ozon/check + блокировка submit на фронте
+7. POST /api/ozon/order + защита на бэке
+8. Nitro scheduled task для ежесуточной синхронизации
+Что нужно прояснить до старта
+Два момента которые влияют на архитектуру:
+
+getDeliveryPrice — нужна та же разведка что делали для getPickupList: реальная сигнатура и формат ответа который Tilda ждёт. Без этого патч писать вслепую.
+
+Авторизация Ozon — ты сказал что готова, но уточни: OAuth-токен уже есть в env и обновляется автоматически, или нужно прикрутить refresh логику?
+
+
+# OZON LOGISTICS BACKEND - ПОЛНЫЙ КОД ПРОЕКТА ## 📋 СОДЕРЖАНИЕ 1. [package.json](#packagejson) 2. [tsconfig.json](#tsconfigjson) 3. [.env](#env) 4. [Конфигурация (config/env.ts)](#конфигурация-configenvts) 5. [Точка входа (src/index.ts)](#точка-входа-srcindexts) 6. [Модули](модули) - [Auth моду
+
+pasted
+
+вот что есть
+
+2 апр.
+Окей, вижу картину целиком. Бэкенд уже хорошо структурирован, осталось добить три вещи.
+
+Что уже есть и что нужно добавить
+Есть:
+
+OAuth + автообновление токена ✅
+checkDeliveryAvailability → /v1/delivery/check ✅
+getPickupPointsList + getPickupPointsInfo ✅
+Кэш ПВЗ с файлами + ежедневное обновление ✅
+/v1/delivery/check endpoint ✅
+Нужно добавить:
+
+1. GET  /delivery/pvz          — отдать кэш в формате Tilda
+2. POST /delivery/price        — /v2/delivery/checkout → цена + сроки  
+3. POST /delivery/order        — /v2/order/create (с check внутри)
+4. Маппинг PickupPointInfoItem → формат Tilda
+5. Патч Tilda (getPickupList + getDeliveryPrice + блокировка submit)
+Шаг 1 — маппинг в types.ts
+Добавь тип который Tilda ожидает:
+
+typescript
+// ozon-logistics/types.ts — добавить в конец
+
+export interface TildaPickupPoint {
+  id: string;
+  name: string;
+  address: string;
+  coordinates: [number, number]; // [lat, lng]
+  workTime: string;
+  phones: string[];
+  addressComment: string;
+  cash: 'y' | 'n';
+  postalCode: string;
+}
+Шаг 2 — маппер + endpoint ПВЗ
+Новый файл src/services/ozon-logistics/mapper.ts:
+
+typescript
+import type { PickupPointInfoItem, TildaPickupPoint } from './types';
+
+export function mapToTildaPickupPoint(
+  point: PickupPointInfoItem,
+): TildaPickupPoint | null {
+  if (!point.enabled) return null;
+
+  const dm = point.delivery_method;
+  const { lat, long } = dm.coordinates;
+
+  // Формируем строку режима работы из массива working_hours
+  const workTime = dm.working_hours
+    .slice(0, 1) // берём первый день как образец
+    .flatMap(wh =>
+      wh.periods.map(
+        p =>
+          `${String(p.min.hours).padStart(2, '0')}:${String(p.min.minutes).padStart(2, '0')}` +
+          `–` +
+          `${String(p.max.hours).padStart(2, '0')}:${String(p.max.minutes).padStart(2, '0')}`,
+      ),
+    )
+    .join(', ') || '';
+
+  return {
+    id: String(dm.map_point_id),
+    name: dm.name,
+    address: dm.address,
+    coordinates: [lat, long],
+    workTime,
+    phones: [],        // Ozon не отдаёт телефоны в этом методе
+    addressComment: dm.description ?? '',
+    cash: 'n',         // Ozon не принимает наличные
+    postalCode: '',    // нет в ответе
+  };
+}
+Новый файл src/services/ozon-logistics/checkout.ts:
+
+typescript
+import { getAccessToken } from '../../utils/getAccessToken';
+import { ozonConfig } from '../../config/env';
+import { OzonApiClient } from '../../utils/typedApiClient';
+
+export interface DeliveryPriceRequest {
+  mapPointId: number;
+  items: { sku: number; quantity: number; offer_id: string }[];
+  buyerPhone?: string;
+}
+
+export interface DeliveryPriceResult {
+  price: number;
+  currency: string;
+  daysMin: number;
+  daysMax: number;
+}
+
+export async function getDeliveryPrice(
+  req: DeliveryPriceRequest,
+): Promise<DeliveryPriceResult> {
+  const token = getAccessToken();
+  if (!token) throw new Error('Требуется авторизация');
+
+  const client = new OzonApiClient(ozonConfig.apiUrl, token, ozonConfig.timeoutMs);
+
+  // /v2/delivery/checkout — проверяем доступность и получаем цену
+  const response = await fetch(`${ozonConfig.apiUrl}/v2/delivery/checkout`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      delivery_type: {
+        pick_up: { map_point_id: req.mapPointId },
+      },
+      items: req.items,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(`Ozon checkout error: ${JSON.stringify(err)}`);
   }
 
-  const body: Record<string, string> = {
-    grant_type: grantType,
-    client_id: String(ozonConfig.clientId),
-    client_secret: ozonConfig.clientSecret,
+  const data = await response.json();
+
+  // Берём первый доступный сплит
+  const split = data.splits?.find(
+    (s: any) => s.unavailable_reason === 'UNSPECIFIED',
+  );
+
+  if (!split) throw new Error('Доставка недоступна для этой точки');
+
+  const timeslot = split.delivery_method?.timeslots?.[0];
+
+  return {
+    price: 0,      // /v2/checkout не возвращает цену — нужен /v2/order/create
+    currency: 'RUB',
+    daysMin: timeslot
+      ? daysBetween(new Date(), new Date(timeslot.client_date_range.from))
+      : 0,
+    daysMax: timeslot
+      ? daysBetween(new Date(), new Date(timeslot.client_date_range.to))
+      : 0,
+  };
+}
+
+function daysBetween(a: Date, b: Date): number {
+  return Math.ceil((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+Шаг 3 — новые endpoints в delivery.ts
+typescript
+// src/modules/delivery/delivery.ts — заменить целиком
+
+import Elysia, { t } from 'elysia';
+import { checkDeliveryAvailability } from '../../services/ozon-logistics/delivery';
+import { loadPointsInfo } from '../../services/pickup-points-cache';
+import { mapToTildaPickupPoint } from '../../services/ozon-logistics/mapper';
+import { getDeliveryPrice } from '../../services/ozon-logistics/checkout';
+
+export const delivery = new Elysia({ prefix: '/delivery' })
+
+  // Уже есть, переносим сюда
+  .post('/check', async ({ body }) => {
+    try {
+      return await checkDeliveryAvailability(body.client_phone);
+    } catch (error) {
+      throw error;
+    }
+  }, {
+    body: t.Object({ client_phone: t.String() }),
+  })
+
+  // Новый: список ПВЗ для Tilda
+  .get('/pvz', ({ query }) => {
+    const cache = loadPointsInfo();
+
+    if (!cache) {
+      return [];
+    }
+
+    const pattern = (query.pattern ?? '').toLowerCase();
+
+    const points = cache.points
+      .map(mapToTildaPickupPoint)
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+
+    if (!pattern) return points;
+
+    return points.filter(
+      p =>
+        p.name.toLowerCase().includes(pattern) ||
+        p.address.toLowerCase().includes(pattern),
+    );
+  }, {
+    query: t.Object({
+      pattern: t.Optional(t.String()),
+    }),
+  })
+
+  // Новый: цена доставки
+  .post('/price', async ({ body }) => {
+    try {
+      return await getDeliveryPrice(body);
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Ошибка расчёта',
+      };
+    }
+  }, {
+    body: t.Object({
+      mapPointId: t.Number(),
+      items: t.Array(t.Object({
+        sku: t.Number(),
+        quantity: t.Number(),
+        offer_id: t.String(),
+      })),
+    }),
+  })
+
+  // Новый: создание заказа
+  .post('/order', async ({ body, set }) => {
+    // Защита на бэке — check всегда, даже если фронт обошли
+    const check = await checkDeliveryAvailability(body.buyer.phone);
+    if (!check.is_possible) {
+      set.status = 400;
+      return { error: 'Доставка Ozon недоступна для этого номера телефона' };
+    }
+
+    const token = /* getAccessToken() */ null; // подставь
+    // TODO: вызов /v2/order/create — добавишь когда будет структура заказа из формы Tilda
+    return { ok: true };
+  }, {
+    body: t.Object({
+      buyer: t.Object({ phone: t.String() }),
+      mapPointId: t.Number(),
+      splits: t.Any(),
+    }),
+  });
+Шаг 4 — патч Tilda (финальная версия)
+javascript
+(function () {
+  const BACKEND = 'https://your-backend.com'; // поменяй
+
+  function waitFor(getter, cb, ms = 200, max = 50) {
+    let n = 0;
+    const t = setInterval(() => {
+      const val = getter();
+      if (val) { clearInterval(t); cb(val); }
+      if (++n >= max) clearInterval(t);
+    }, ms);
+  }
+
+  waitFor(() => window.tcart_newDelivery, (delivery) => {
+
+    // 1. Список ПВЗ
+    delivery.getPickupList = function (params) {
+      const url = `${BACKEND}/delivery/pvz?pattern=${encodeURIComponent(params.pattern ?? '')}`;
+      fetch(url)
+        .then(r => r.json())
+        .then(data => params.onDone(data))
+        .catch(() => params.onFail && params.onFail());
+    };
+
+    // 2. Цена доставки — нужна сигнатура, пока логируем
+    const origPrice = delivery.getDeliveryPrice?.bind(delivery);
+    if (origPrice) {
+      delivery.getDeliveryPrice = function (params) {
+        console.log('[OzonPatch] getDeliveryPrice params:', params);
+        return origPrice(params);
+      };
+    }
+
+    console.log('[OzonPatch] Патч применён ✓');
+  });
+
+  // 3. Блокировка submit если check не прошёл
+  waitFor(
+    () => document.querySelector('input[name="phone"]'),
+    (phoneInput) => {
+      phoneInput.addEventListener('blur', async () => {
+        const phone = phoneInput.value.replace(/\D/g, '');
+        if (phone.length < 11) return;
+
+        const res = await fetch(`${BACKEND}/delivery/check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_phone: phone }),
+        }).then(r => r.json()).catch(() => ({ is_possible: true }));
+
+        if (!res.is_possible) {
+          window.tcart__blockSubmitButton?.();
+          // показываем ошибку в UI Tilda
+          const err = document.querySelector('.js-form-error');
+          if (err) err.textContent = 'Доставка Ozon недоступна для этого номера';
+        }
+      });
+    }
+  );
+})();
+Что осталось на потом
+Одна вещь которую нельзя сделать сейчас — /delivery/order. Нужно понять какие именно поля Tilda отправляет в теле формы при сабмите, чтобы правильно смапить в структуру /v2/order/create. Это отдельная разведка — поставь console.log на сабмит формы Tilda и посмотри что приходит.
+
+бляя, нужно присовокупить сюда пагинацию каким-то образом, а тильда ее технически не поддерживает, бля
+
+00:35
+Да, это боль. Tilda просто вызывает getPickupList и ждёт массив — никакой пагинации, никаких колбэков "загрузи ещё".
+
+Но проблема решаема. Смотри какие есть варианты:
+
+Вариант 1 — просто не грузить все (рекомендую)
+Ozon ПВЗ по всей России — это тысячи точек, но пользователь находится в одном городе. Фильтруй на бэке по городу из postalCode который Tilda передаёт в params:
+
+typescript
+// GET /delivery/pvz?postalCode=344000&pattern=
+.get('/pvz', ({ query }) => {
+  const cache = loadPointsInfo();
+  if (!cache) return [];
+
+  const pattern = (query.pattern ?? '').toLowerCase();
+  const postalCode = query.postalCode ?? '';
+
+  return cache.points
+    .map(mapToTildaPickupPoint)
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .filter(p => !postalCode || p.postalCode === postalCode)
+    .filter(p =>
+      !pattern ||
+      p.name.toLowerCase().includes(pattern) ||
+      p.address.toLowerCase().includes(pattern)
+    )
+    .slice(0, 200); // потолок на всякий случай
+})
+Проблема — в PickupPointInfoItem нет почтового индекса напрямую. Но есть address_details.city — можно фильтровать по городу.
+
+Вариант 2 — виртуальная пагинация через pattern
+Tilda вызывает getPickupList каждый раз когда пользователь что-то печатает в поиске. То есть pattern — это уже де-факто пагинация через поиск. Просто верни топ-50 по релевантности:
+
+typescript
+.slice(0, 50)
+Пользователь не будет скроллить 5000 точек — он будет искать свою улицу.
+
+Вариант 3 — lazy load через кастомный UI (сложно)
+Если реально нужна пагинация — придётся полностью переопределить mapAddPoints тоже, и рисовать свой список поверх тильдовского. Это уже серьёзный хак на DOM, овчинка скорее всего не стоит выделки.
+
+Мой совет: вариант 1 + вариант 2 вместе. Фильтр по городу через address_details.city + лимит 100 точек. Для одного города это покроет всё, а пользователь ещё и поиском сузит.
+
+Покажи как выглядит address_details в реальном ответе Ozon — уточним фильтр.
+
+там есть еще и карта, в этом прикол
+
+00:36
+Ааа, точно. Карта через mapAddPoints — туда Tilda передаёт весь массив и рисует все точки разом.
+
+Значит проблема двойная:
+
+список в searchbox — можно ограничить
+точки на карте — Tilda сама рисует все что пришло, и 5000 маркеров убьют браузер
+Как это реально работает
+По коду из document 2, flow такой:
+
+пользователь выбирает тип доставки
+  → getPickupList({ onDone: (points) => mapAddPoints(points) })
+  → mapAddPoints рисует ВСЕ точки на карте
+То есть mapAddPoints вызывается внутри onDone колбэка — и это место тоже можно перехватить.
+
+Решение — перехватить mapAddPoints тоже
+javascript
+waitFor(() => window.tcart_newDelivery, (delivery) => {
+
+  // Перехватываем mapAddPoints — рисуем только точки в viewport
+  const origMapAddPoints = delivery.mapAddPoints?.bind(delivery);
+
+  delivery.mapAddPoints = function (points) {
+    console.log('[OzonPatch] mapAddPoints вызван, точек:', points.length);
+    // Пока просто логируем — нужно понять сигнатуру
+    return origMapAddPoints?.(points);
   };
 
-  if (grantType === "authorization_code") {
-    if (!code) {
-      throw new Error("Для authorization_code требуется параметр code");
-    }
-    body.code = code;
-    body.redirect_uri = ozonConfig.redirectUri;
-  } else if (grantType === "refresh_token") {
-    if (!refreshToken) {
-      throw new Error("Для refresh_token требуется параметр refresh_token");
-    }
-    body.refresh_token = refreshToken;
+  delivery.getPickupList = function (params) {
+    fetch(`${BACKEND}/delivery/pvz?pattern=${encodeURIComponent(params.pattern ?? '')}&postalCode=${params.postalCode ?? ''}`)
+      .then(r => r.json())
+      .then(data => params.onDone(data))
+      .catch(() => params.onFail?.());
+  };
+});
+```
+
+Но это полурешение. Настоящих вариантов два:
+
+---
+
+### Вариант А — кластеризация на бэке
+
+Бэк отдаёт не точки а кластеры когда zoom маленький, точки когда zoom большой. Но Tilda не передаёт zoom в `getPickupList` — значит нужно перехватывать события карты Яндекса отдельно.
+
+Это сложно и хрупко.
+
+---
+
+### Вариант Б — отдавать разумный региональный срез (реально)
+
+Ozon сам предоставляет `/v1/delivery/map` — он возвращает **кластеры** по viewport. Это именно то что нужно для карты.
+
+Архитектура тогда меняется:
+```
+кэш = все точки (для поиска по тексту)
+
+карта = НЕ из кэша, а /v1/delivery/map по координатам viewport
+Проблема — Tilda не вызывает твой бэк для карты, она вызывает mapAddPoints с тем что пришло из getPickupList.
+
+Значит нужно:
+
+getPickupList → отдаёт пустой массив или топ-50 по городу
+Перехватить инициализацию карты Яндекса
+Повесить свой обработчик на boundschange карты
+При изменении viewport → твой бэк → /v1/delivery/map → delivery.mapAddPoints(points)
+Прежде чем выбирать путь — скажи: у тебя Ozon доставляет только по конкретному региону или по всей России? Если по одному городу — проблема пагинации вообще не стоит.
+
+по всей россии, 85к пвз :)
+
+00:37
+Ок, 85к — это однозначно вариант Б с /v1/delivery/map и viewport.
+
+Давай сначала пойму одну вещь прежде чем писать код.
+
+Хм, ответы не пришли. Но по document 2 я уже вижу — там явно написано geocode-maps.yandex.ru и методы mapAppendScript, mapInit — это ymaps.
+
+Значит архитектура такая:
+
+Общая схема
+Tilda инициализирует ymaps
+  → delivery.mapInit() создаёт карту
+  → мы перехватываем событие boundschange на объекте карты
+  → при изменении viewport → POST /delivery/map → /v1/delivery/map Ozon
+  → получаем кластеры/точки → вызываем delivery.mapAddPoints(points)
+Патч — полная версия с viewport
+javascript
+(function () {
+  const BACKEND = 'https://your-backend.com';
+
+  function waitFor(getter, cb, ms = 200, max = 75) {
+    let n = 0;
+    const t = setInterval(() => {
+      const val = getter();
+      if (val) { clearInterval(t); cb(val); }
+      if (++n >= max) clearInterval(t);
+    }, ms);
   }
 
-  try {
-    const jsonBody = JSON.stringify(body);
-    console.log("📤 Отправляем запрос на получение токена");
-    console.log("URL:", ozonConfig.oauthTokenUrl);
-    console.log("Тело (raw):", jsonBody);
+  // Текущий запрос — отменяем предыдущий если карта двигается быстро
+  let currentRequest = null;
 
-    const response = await rateLimitedFetch(ozonConfig.oauthTokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: jsonBody,
+  // Загрузка точек по viewport карты
+  async function loadPointsForViewport(map, delivery) {
+    const bounds = map.getBounds(); // [[lat1,lng1],[lat2,lng2]]
+
+    // Отменяем предыдущий запрос
+    if (currentRequest) {
+      currentRequest.cancelled = true;
+    }
+    const req = { cancelled: false };
+    currentRequest = req;
+
+    try {
+      const res = await fetch(`${BACKEND}/delivery/map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          viewport: {
+            left_bottom:  { lat: bounds[0][0], long: bounds[0][1] },
+            right_top:    { lat: bounds[1][0], long: bounds[1][1] },
+          },
+          zoom: map.getZoom(),
+        }),
+      });
+
+      if (req.cancelled) return; // карта уже уехала дальше
+
+      const data = await res.json(); // массив TildaPickupPoint[]
+      delivery.mapAddPoints(data);
+    } catch (e) {
+      console.warn('[OzonPatch] ошибка загрузки точек:', e);
+    }
+  }
+
+  waitFor(() => window.tcart_newDelivery, (delivery) => {
+
+    // 1. Перехватываем mapInit — вешаем boundschange после того как карта создана
+    const origMapInit = delivery.mapInit?.bind(delivery);
+    delivery.mapInit = function (...args) {
+      const result = origMapInit?.(...args);
+
+      // mapInit создаёт карту и пишет её в window.t_delivery__map
+      waitFor(() => window.t_delivery__map, (map) => {
+        console.log('[OzonPatch] карта найдена, вешаем boundschange');
+
+        // debounce — не долбим бэк при каждом пикселе
+        let debounceTimer = null;
+        map.events.add('boundschange', () => {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            loadPointsForViewport(map, delivery);
+          }, 400);
+        });
+
+        // Загружаем точки для начального viewport сразу
+        loadPointsForViewport(map, delivery);
+      });
+
+      return result;
+    };
+
+    // 2. getPickupList — отдаём ПУСТОЙ массив
+    // Точки на карте грузим сами через boundschange
+    // Searchbox (поиск текстом) — отдаём из кэша по pattern
+    delivery.getPickupList = function (params) {
+      if (params.pattern) {
+        // Текстовый поиск — идём на бэк
+        fetch(`${BACKEND}/delivery/pvz?pattern=${encodeURIComponent(params.pattern)}&postalCode=${params.postalCode ?? ''}`)
+          .then(r => r.json())
+          .then(data => params.onDone(data))
+          .catch(() => params.onFail?.());
+      } else {
+        // Начальная загрузка без поиска — карта сама загрузит через boundschange
+        params.onDone([]);
+      }
+    };
+
+    console.log('[OzonPatch] Патч применён ✓');
+  });
+
+})();
+Новый endpoint на бэке — /delivery/map
+typescript
+// src/services/ozon-logistics/delivery.ts — добавить
+
+export async function getPickupPointsMap(viewport: {
+  left_bottom: { lat: number; long: number };
+  right_top:   { lat: number; long: number };
+}, zoom: number) {
+  const token = getAccessToken();
+  if (!token) throw new Error('Требуется авторизация');
+
+  const response = await fetch(`${ozonConfig.apiUrl}/v1/delivery/map`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ viewport, zoom }),
+  });
+
+  if (!response.ok) throw new Error(`Ozon map error: ${response.status}`);
+  return response.json();
+}
+typescript
+// src/modules/delivery/delivery.ts — добавить endpoint
+
+.post('/map', async ({ body }) => {
+  try {
+    const ozonData = await getPickupPointsMap(body.viewport, body.zoom);
+
+    // /v1/delivery/map возвращает кластеры, не точки напрямую
+    // Если кластер содержит одну точку — маппим в TildaPickupPoint из кэша
+    // Если кластер — показываем как есть (Tilda всё равно вызовет mapAddPoints)
+    const cache = loadPointsInfo();
+    const cacheMap = new Map(
+      cache?.points.map(p => [p.delivery_method.map_point_id, p]) ?? []
+    );
+
+    const points = ozonData.clusters
+      .filter((c: any) => c.points_count === 1)
+      .map((c: any) => {
+        const id = Number(c.map_point_ids[0]);
+        const cached = cacheMap.get(id);
+        return cached ? mapToTildaPickupPoint(cached) : null;
+      })
+      .filter(Boolean);
+
+    return points;
+  } catch (e) {
+    return [];
+  }
+}, {
+  body: t.Object({
+    viewport: t.Object({
+      left_bottom: t.Object({ lat: t.Number(), long: t.Number() }),
+      right_top:   t.Object({ lat: t.Number(), long: t.Number() }),
+    }),
+    zoom: t.Number(),
+  }),
+})
+Проблема с кластерами
+/v1/delivery/map при маленьком zoom возвращает кластеры где points_count > 1 — у них нет деталей, только координаты и количество. Tilda не умеет рисовать кластеры — она рисует только индивидуальные точки.
+
+Варианта два:
+
+При zoom < 10 — не рисуй ничего, просто жди пока пользователь приблизится. Или рисуй одну "заглушку"-точку в центре кластера без деталей.
+
+При zoom >= 10 — кластеров почти не будет, все точки индивидуальные, маппишь из кэша нормально.
+
+Добавь в патч:
+
+javascript
+map.events.add('boundschange', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    if (map.getZoom() < 10) {
+      delivery.mapAddPoints([]); // слишком далеко — чистим карту
+      return;
+    }
+    loadPointsForViewport(map, delivery);
+  }, 400);
+});
+Guihal/ozon
+main
+
+GITHUB
+
+Q: Карта в Tilda у тебя уже инициализируется и показывается (просто с твоими тестовыми точками)?
+A: Да, карта работает
+
+Q: Яндекс Карты или Leaflet/Google — что использует Tilda в tdelivery.js?
+A: Яндекс Карты (ymaps) Смотри, сейчас точки через sqlite забиваются в мою бд, и поэтому нужно будет в эндпоинте это учитывать
+
+00:43
+Окей, всё понятно. SQLite уже есть, данные там, теперь нужен endpoint /delivery/map который делает пространственный запрос по координатам viewport.
+
+Шаг 1 — добавить пространственный индекс в SQLite
+В src/db/index.ts добавить после существующих индексов:
+
+typescript
+// Составной индекс для быстрого поиска по координатам
+db.run("CREATE INDEX IF NOT EXISTS idx_pp_coords ON pickup_points(lat, long)");
+Шаг 2 — функция запроса по viewport в pickup-points-cache.ts
+typescript
+export function getTildaPickupPointsByViewport(options: {
+  latMin: number;
+  latMax: number;
+  lngMin: number;
+  lngMax: number;
+  limit?: number;
+}): TildaPickupPoint[] {
+  const { latMin, latMax, lngMin, lngMax, limit = 300 } = options;
+
+  const rows = db.prepare(`
+    SELECT * FROM pickup_points
+    WHERE enabled = 1
+      AND lat BETWEEN ? AND ?
+      AND long BETWEEN ? AND ?
+    ORDER BY pvz_rating DESC
+    LIMIT ?
+  `).all(latMin, latMax, lngMin, lngMax, limit) as PickupPointRow[];
+
+  return rows.map(mapRowToTilda);
+}
+ORDER BY pvz_rating DESC — при большом количестве точек в viewport покажем сначала лучшие, остальные обрежет LIMIT.
+
+Шаг 3 — endpoint в delivery.ts
+typescript
+import { getTildaPickupPointsByViewport } from "../../services/pickup-points-cache";
+
+// добавить в delivery router:
+.post(
+  "/delivery/map",
+  ({ body }) => {
+    const { viewport, zoom } = body;
+
+    // При маленьком zoom слишком много точек — не имеет смысла
+    if (zoom < 10) {
+      return [];
+    }
+
+    const points = getTildaPickupPointsByViewport({
+      latMin: viewport.left_bottom.lat,
+      latMax: viewport.right_top.lat,
+      lngMin: viewport.left_bottom.long,
+      lngMax: viewport.right_top.long,
+      // Чем больше zoom — тем меньше viewport — можно больше точек
+      limit: zoom >= 14 ? 500 : zoom >= 12 ? 200 : 100,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.log(errorData);
-      console.error("Тело запроса:", JSON.stringify(body, null, 2));
-      console.error("Статус ошибки:", response.status);
-      console.error("Полная ошибка:", JSON.stringify(errorData, null, 2));
-      throw new Error(
-        `Ошибка получения токена: ${response.status} ${response.statusText} - ${errorData.message || "Неизвестная ошибка"}`,
-      );
+    return points;
+  },
+  {
+    body: t.Object({
+      viewport: t.Object({
+        left_bottom: t.Object({ lat: t.Number(), long: t.Number() }),
+        right_top:   t.Object({ lat: t.Number(), long: t.Number() }),
+      }),
+      zoom: t.Number(),
+    }),
+  },
+)
+Шаг 4 — патч Tilda (финальный)
+javascript
+(function () {
+  const BACKEND = 'https://your-backend.com';
+
+  function waitFor(getter, cb, ms = 200, max = 75) {
+    let n = 0;
+    const t = setInterval(() => {
+      const val = getter();
+      if (val) { clearInterval(t); cb(val); }
+      if (++n >= max) clearInterval(t);
+    }, ms);
+  }
+
+  let pendingRequest = null;
+
+  async function loadPointsForViewport(map, delivery) {
+    const zoom = map.getZoom();
+
+    if (zoom < 10) {
+      delivery.mapAddPoints([]);
+      return;
     }
 
-    const data: TokenData = await response.json();
+    const bounds = map.getBounds();
+    const token = Symbol(); // уникальный токен для отмены устаревших запросов
+    pendingRequest = token;
 
-    // Обновляем глобальное хранилище
-    tokenCache.value = data.access_token;
-    tokenCache.refresh_token = data.refresh_token || null;
-    tokenCache.expires = Date.now() + data.expires_in * 1000;
+    try {
+      const res = await fetch(`${BACKEND}/v1/delivery/map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          viewport: {
+            left_bottom: { lat: bounds[0][0], long: bounds[0][1] },
+            right_top:   { lat: bounds[1][0], long: bounds[1][1] },
+          },
+          zoom,
+        }),
+      });
 
-    // Сохраняем в файл
-    saveTokenToFile();
+      // Карта уже сдвинулась пока ждали — выбрасываем ответ
+      if (pendingRequest !== token) return;
 
-    // Запускаем автоматическое обновление
-    scheduleAutoRefresh(data.expires_in);
-
-    console.log(`Токен получен. Истекает через ${data.expires_in} секунд.`);
-
-    return data;
-  } catch (error) {
-    console.error("Ошибка fetchAccessToken:", error);
-    throw error;
+      const points = await res.json();
+      delivery.mapAddPoints(points);
+    } catch (e) {
+      console.warn('[OzonPatch] ошибка загрузки карты:', e);
+    }
   }
+
+  waitFor(() => window.tcart_newDelivery, (delivery) => {
+
+    // Перехватываем mapInit — вешаем boundschange после создания карты
+    const origMapInit = delivery.mapInit?.bind(delivery);
+    delivery.mapInit = function (...args) {
+      const result = origMapInit?.(...args);
+
+      waitFor(() => window.t_delivery__map, (map) => {
+        let debounce = null;
+
+        map.events.add('boundschange', () => {
+          clearTimeout(debounce);
+          debounce = setTimeout(() => loadPointsForViewport(map, delivery), 400);
+        });
+
+        // Загружаем сразу для начального viewport
+        loadPointsForViewport(map, delivery);
+      });
+
+      return result;
+    };
+
+    // getPickupList — текстовый поиск идёт на бэк, без pattern — пусто
+    // карта сама загрузит точки через boundschange
+    delivery.getPickupList = function (params) {
+      if (params.pattern) {
+        const url = `${BACKEND}/v1/delivery/pvz?q=${encodeURIComponent(params.pattern)}&limit=50`;
+        fetch(url)
+          .then(r => r.json())
+          .then(data => params.onDone(data.pvz ?? []))
+          .catch(() => params.onFail?.());
+      } else {
+        params.onDone([]);
+      }
+    };
+
+    console.log('[OzonPatch] Патч применён ✓');
+  });
+
+})();
+Почему Symbol() вместо флага cancelled
+Предыдущая версия использовала объект { cancelled: true } — это работает, но требует мутации. Symbol() чище: каждый новый запрос создаёт уникальный токен, и проверка pendingRequest !== token автоматически инвалидирует все предыдущие без мутаций.
+
+mapAddPoints: function e(t, r, n) {
+        var i = this;
+        void 0 !== window.ymaps && window.ymaps.ready((function() {
+            window.t_delivery__map.geoObjects && window.t_delivery__map.geoObjects.removeAll();
+            var e = [];
+            if (r.forEach((function(t) {
+                0 === t.coordinates[0] && 0 === t.coordinates[1] || e.push(t.coordinates)
+            }tilda-delivery-1.0.min.js:1 Uncaught TypeError: Cannot read properties of undefined (reading 'forEach')
+
+00:54
+Ошибка понятна. mapAddPoints принимает три аргумента (t, r, n), а точки — это r (второй аргумент), не первый.
+
+Смотри на сигнатуру: e(t, r, n) где r.forEach(...) — значит r это массив точек.
+
+Нужно понять что такое t и n. Попроси разведку — найди в tdelivery.js все места где вызывается mapAddPoints( и покажи контекст вызовов, чтобы увидеть что передаётся первым и третьим аргументом.
+
+Либо быстрый способ — вставь в консоль прямо сейчас:
+
+javascript
+const orig = window.tcart_newDelivery.mapAddPoints.bind(window.tcart_newDelivery);
+window.tcart_newDelivery.mapAddPoints = function(t, r, n) {
+  console.log('[mapAddPoints] t:', t, 'r:', r, 'n:', n);
+  return orig(t, r, n);
+};
+Потом выбери доставку с ПВЗ в UI — и посмотри что реально приходит в t и n при нормальном вызове от Tilda.
+
+мне нужен одновременно поиск через инпут, как есть, и карта, это нужно каким-то хуем отделить
+
+00:55
+Да, это два разных flow в Tilda:
+
+Текстовый поиск:  getPickupList({ pattern: "..." }) → onDone(points) → fillSearchList(points)
+Карта:            getPickupList({ pattern: "" })    → onDone(points) → mapAddPoints(?, points, ?)
+Один и тот же метод, но Tilda внутри делает разное с результатом в зависимости от контекста. Нужно понять — она как-то маркирует эти два вызова, или просто вызывает одно и то же onDone который сам решает?
+
+Вставь в консоль:
+
+javascript
+const orig = window.tcart_newDelivery.getPickupList.bind(window.tcart_newDelivery);
+window.tcart_newDelivery.getPickupList = function(params) {
+  console.log('[getPickupList] params keys:', Object.keys(params));
+  console.log('[getPickupList] pattern:', JSON.stringify(params.pattern));
+  
+  // Оборачиваем onDone чтобы видеть ЧТО вызывается после
+  const origOnDone = params.onDone;
+  params.onDone = function(...args) {
+    console.log('[onDone] вызван, args:', args);
+    console.trace('[onDone] stacktrace');
+    return origOnDone?.(...args);
+  };
+  
+  return orig(params);
+};
+Потом сделай два действия по очереди — напечатай что-то в поиске, потом просто открой выбор ПВЗ без поиска. По stacktrace будет видно разные caller'ы и станет понятно как их различить.
+
+[getPickupList] params keys: (5) ['projectId', 'postalCode', 'deliveryId', 'onDone', 'onFail']
+VM395:4 [getPickupList] pattern: undefined
+VM395:9 [onDone] вызван, args: [Array(0)]0: Array(0)length: 0[[Prototype]]: Array(0)length: 1[[Prototype]]: Array(0)
+VM395:10 [onDone] stacktrace
+params.onDone @ VM395:10
+delivery.getPickupList @ page131598136.html:120
+window.tcart_newDelivery.getPickupList @ VM395:14
+e @ tilda-delivery-1.0.min.js:1
+(anonymous) @ tilda-delivery-1.0.min.js:1
+t_triggerEvent @ tilda-cart-restorefields-1.0.min.js:1
+e @ tilda-delivery-1.0.min.js:1
+y.onload @ tilda-delivery-1.0.min.js:1
+XMLHttpRequest.send
+(anonymous) @ requests.js:1
+(anonymous) @ 200.js:1
+e @ tilda-delivery-1.0.min.js:1
+e @ tilda-delivery-1.0.min.js:1
+e @ tilda-delivery-1.0.min.js:1
+Promise.then
+e @ tilda-delivery-1.0.min.js:1
+(anonymous) @ tilda-cart-1.1.min.js:1
+Promise.then
+tcart__initDelivery @ tilda-cart-1.1.min.js:1
+r @ tilda-cart-1.1.min.js:1
+Promise.then
+(anonymous) @ tilda-cart-1.1.min.js:1
+Promise.then
+(anonymous) @ tilda-cart-1.1.min.js:1
+Promise.then
+t @ tilda-cart-1.1.min.js:1
+tcart__openCart @ tilda-cart-1.1.min.js:1
+(anonymous) @ page131598136.html:228
+setInterval
+(anonymous) @ page131598136.html:228
+
+Show more
+00:57
+Отлично, вижу картину. Это вызов без pattern — это инициализация карты при открытии корзины. Теперь напечатай что-нибудь в поисковом инпуте и покажи лог — нужно увидеть второй вызов с pattern.
+
+Но уже сейчас видно главное: pattern отсутствует совсем (undefined), а не пустая строка. Значит различить просто:
+
+javascript
+delivery.getPickupList = function(params) {
+  if (params.pattern !== undefined) {
+    // Текстовый поиск — идём на бэк, отдаём в searchbox
+    fetch(`${BACKEND}/v1/delivery/pvz?q=${encodeURIComponent(params.pattern)}&limit=50`)
+      .then(r => r.json())
+      .then(data => params.onDone(data.pvz ?? []))
+      .catch(() => params.onFail?.());
+  } else {
+    // Инициализация карты — отдаём пустой массив,
+    // карта загрузит точки сама через boundschange
+    params.onDone([]);
+  }
+};
+params.pattern === undefined → карта, params.pattern !== undefined → поиск (даже если пустая строка).
+
+Покажи лог второго вызова (с поиском) чтобы убедиться что там pattern есть — и тогда это решение финальное.
+
+[getPickupList] params keys: (6) ['projectId', 'postalCode', 'deliveryId', 'pattern', 'onDone', 'onFail']
+VM395:4 [getPickupList] pattern: "а"
+VM395:3 [getPickupList] params keys: (6) ['projectId', 'postalCode', 'deliveryId', 'pattern', 'onDone', 'onFail']
+VM395:4 [getPickupList] pattern: "а"
+VM395:3 [getPickupList] params keys: (6) ['projectId', 'postalCode', 'deliveryId', 'pattern', 'onDone', 'onFail']
+VM395:4 [getPickupList] pattern: "ав"
+VM395:9 [onDone] вызван, args: [Array(50)]
+VM395:10 [onDone] stacktrace
+params.onDone @ VM395:10
+(anonymous) @ page131598136.html:117
+Promise.then
+delivery.getPickupList @ page131598136.html:117
+window.tcart_newDelivery.getPickupList @ VM395:14
+e @ tilda-delivery-1.0.min.js:1
+(anonymous) @ tilda-delivery-1.0.min.js:1
+setTimeout
+(anonymous) @ tilda-delivery-1.0.min.js:1
+
+Show more
+00:58
+Идеально. Всё подтверждено:
+
+pattern: undefined → карта (5 ключей, нет pattern в объекте)
+pattern: "ав" → поиск (6 ключей, pattern есть)
+Tilda сама делает debounce на поиск (видно setTimeout в стектрейсе). И onDone вызывается с Array(50) — значит лимит 50 для поиска работает нормально.
+
+Финальный патч — полностью рабочий:
+
+javascript
+(function () {
+  const BACKEND = 'https://your-backend.com';
+
+  function waitFor(getter, cb, ms = 200, max = 75) {
+    let n = 0;
+    const t = setInterval(() => {
+      const val = getter();
+      if (val) { clearInterval(t); cb(val); }
+      if (++n >= max) clearInterval(t);
+    }, ms);
+  }
+
+  let pendingMapToken = null;
+
+  async function loadPointsForViewport(map, delivery) {
+    const zoom = map.getZoom();
+
+    if (zoom < 10) {
+      delivery.mapAddPoints(null, [], null);
+      return;
+    }
+
+    const bounds = map.getBounds();
+    const token = Symbol();
+    pendingMapToken = token;
+
+    try {
+      const res = await fetch(`${BACKEND}/v1/delivery/map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          viewport: {
+            left_bottom: { lat: bounds[0][0], long: bounds[0][1] },
+            right_top:   { lat: bounds[1][0], long: bounds[1][1] },
+          },
+          zoom,
+        }),
+      });
+
+      if (pendingMapToken !== token) return;
+
+      const points = await res.json();
+      delivery.mapAddPoints(null, points, null);
+    } catch (e) {
+      console.warn('[OzonPatch] ошибка загрузки карты:', e);
+    }
+  }
+
+  waitFor(() => window.tcart_newDelivery, (delivery) => {
+
+    // Перехват mapInit — вешаем boundschange после создания карты
+    const origMapInit = delivery.mapInit?.bind(delivery);
+    delivery.mapInit = function (...args) {
+      const result = origMapInit?.(...args);
+
+      waitFor(() => window.t_delivery__map, (map) => {
+        let debounce = null;
+        map.events.add('boundschange', () => {
+          clearTimeout(debounce);
+          debounce = setTimeout(() => loadPointsForViewport(map, delivery), 400);
+        });
+        loadPointsForViewport(map, delivery);
+      });
+
+      return result;
+    };
+
+    // Разделяем поиск и карту по наличию pattern в объекте
+    delivery.getPickupList = function (params) {
+      if ('pattern' in params) {
+        // Текстовый поиск → бэк → searchbox
+        fetch(`${BACKEND}/v1/delivery/pvz?q=${encodeURIComponent(params.pattern)}&limit=50`)
+          .then(r => r.json())
+          .then(data => params.onDone(data.pvz ?? []))
+          .catch(() => params.onFail?.());
+      } else {
+        // Инициализация карты → пустой массив, точки грузим сами
+        params.onDone([]);
+      }
+    };
+
+    console.log('[OzonPatch] Патч применён ✓');
+  });
+
+})();
+Два момента которые уточнились из логов:
+
+'pattern' in params вместо params.pattern !== undefined — надёжнее, потому что ключ физически отсутствует в объекте при вызове карты, а не просто undefined.
+
+mapAddPoints(null, points, null) — теперь знаем что второй аргумент это массив точек. null для первого и третьего — безопаснее чем undefined, но нужно проверить живым запуском. Если упадёт — покажи ошибку и разберём что ожидается в t и n.
+
+бля, почему запросы по поиску точек в бд хуярят до 100% cpu
+
+01:05
+SQLite + LIKE с % в начале строки — это full table scan, индексы не используются вообще.
+
+sql
+-- ЭТО не использует индекс:
+WHERE name LIKE '%ав%'
+Решение — FTS5 (Full Text Search), встроен в SQLite, Bun поддерживает.
+
+Шаг 1 — добавить FTS таблицу в src/db/index.ts
+typescript
+// Виртуальная FTS5 таблица для поиска
+db.run(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS pickup_points_fts
+  USING fts5(
+    map_point_id UNINDEXED,
+    name,
+    address,
+    city,
+    region,
+    content='pickup_points',
+    content_rowid='map_point_id'
+  )
+`);
+
+// Триггеры для синхронизации FTS при INSERT/UPDATE/DELETE
+db.run(`
+  CREATE TRIGGER IF NOT EXISTS pp_fts_insert
+  AFTER INSERT ON pickup_points BEGIN
+    INSERT INTO pickup_points_fts(rowid, map_point_id, name, address, city, region)
+    VALUES (new.map_point_id, new.map_point_id, new.name, new.address, new.city, new.region);
+  END
+`);
+
+db.run(`
+  CREATE TRIGGER IF NOT EXISTS pp_fts_update
+  AFTER UPDATE ON pickup_points BEGIN
+    INSERT INTO pickup_points_fts(pickup_points_fts, rowid, map_point_id, name, address, city, region)
+    VALUES ('delete', old.map_point_id, old.map_point_id, old.name, old.address, old.city, old.region);
+    INSERT INTO pickup_points_fts(rowid, map_point_id, name, address, city, region)
+    VALUES (new.map_point_id, new.map_point_id, new.name, new.address, new.city, new.region);
+  END
+`);
+
+db.run(`
+  CREATE TRIGGER IF NOT EXISTS pp_fts_delete
+  AFTER DELETE ON pickup_points BEGIN
+    INSERT INTO pickup_points_fts(pickup_points_fts, rowid, map_point_id, name, address, city, region)
+    VALUES ('delete', old.map_point_id, old.map_point_id, old.name, old.address, old.city, old.region);
+  END
+`);
+Шаг 2 — заполнить FTS из существующих данных
+В pickup-points-cache.ts добавить функцию и вызвать при инициализации:
+
+typescript
+export function rebuildFts(): void {
+  console.log('🔄 Перестройка FTS индекса...');
+  db.run(`
+    INSERT INTO pickup_points_fts(pickup_points_fts)
+    VALUES ('rebuild')
+  `);
+  console.log('✅ FTS индекс перестроен');
 }
+Вызвать один раз в initializePickupPointsCache после заполнения БД:
+
+typescript
+// После fetchAllPointsInfo:
+rebuildFts();
+Шаг 3 — заменить запрос в getTildaPickupPoints
+typescript
+export function getTildaPickupPoints(options?: {
+  q?: string;
+  limit?: number;
+  offset?: number;
+}): {
+  pvz: TildaPickupPoint[];
+  total: number;
+  limit: number;
+  offset: number;
+} {
+  const { q, limit = 500, offset = 0 } = options || {};
+
+  let rows: PickupPointRow[];
+  let total: number;
+
+  if (q) {
+    // FTS поиск — быстро, индекс
+    // * в конце = prefix search: "авто" найдёт "автово"
+    const ftsQuery = q.trim().split(/\s+/).map(w => `${w}*`).join(' ');
+
+    const ftsRows = db.prepare(`
+      SELECT p.*
+      FROM pickup_points p
+      JOIN pickup_points_fts f ON f.map_point_id = p.map_point_id
+      WHERE pickup_points_fts MATCH ?
+        AND p.enabled = 1
+      ORDER BY rank
+      LIMIT ? OFFSET ?
+    `).all(ftsQuery, limit, offset) as PickupPointRow[];
+
+    const ftsTotal = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM pickup_points p
+      JOIN pickup_points_fts f ON f.map_point_id = p.map_point_id
+      WHERE pickup_points_fts MATCH ?
+        AND p.enabled = 1
+    `).get(ftsQuery) as { total: number };
+
+    rows = ftsRows;
+    total = ftsTotal.total;
+  } else {
+    // Без поиска — обычная пагинация
+    rows = db.prepare(`
+      SELECT * FROM pickup_points
+      WHERE enabled = 1
+      ORDER BY city, name
+      LIMIT ? OFFSET ?
+    `).all(limit, offset) as PickupPointRow[];
+
+    total = (db.prepare(
+      'SELECT COUNT(*) as total FROM pickup_points WHERE enabled = 1'
+    ).get() as { total: number }).total;
+  }
+
+  return { pvz: rows.map(mapRowToTilda), total, limit, offset };
+}
+Почему это быстро
+LIKE с % в начале — O(n), читает каждую строку. FTS5 строит инвертированный индекс (слово → список id) — поиск O(log n), практически мгновенный даже на 85к строк. rank — встроенная релевантность FTS5, самые точные совпадения идут первыми.
+
+После добавления FTS нужно удалить старую БД и дать ей пересоздаться, либо вызвать rebuildFts() вручную один раз — триггеры начнут работать только для новых записей.

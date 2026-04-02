@@ -217,42 +217,53 @@ export function getTildaPickupPoints(options?: {
   let total: number;
 
   if (q) {
-    // FTS поиск — быстро, использует инвертированный индекс
-    // * в конце = prefix search: "авто" найдёт "автово"
-    const ftsQuery = q
-      .trim()
-      .split(/\s+/)
-      .map((w) => `${w}*`)
-      .join(" ");
+    // 1. Очистка строки: оставляем только буквы, цифры и пробелы
+    // Это удалит дефисы, скобки и прочие спецсимволы FTS5
+    const sanitizedQ = q.replace(/[^\w\sа-яА-ЯёЁ]/gi, " ").trim();
 
-    const ftsRows = db
-      .prepare(
-        `
-      SELECT p.*
-      FROM pickup_points p
-      JOIN pickup_points_fts f ON f.map_point_id = p.map_point_id
-      WHERE pickup_points_fts MATCH ?
-        AND p.enabled = 1
-      ORDER BY rank
-      LIMIT ? OFFSET ?
-    `,
-      )
-      .all(ftsQuery, limit, offset) as PickupPointRow[];
+    // Если после очистки что-то осталось
+    if (sanitizedQ.length > 0) {
+      // 2. Формируем запрос для MATCH
+      // Разделяем по пробелам и добавляем * к каждому слову для поиска по префиксу
+      const ftsQuery = sanitizedQ
+        .split(/\s+/)
+        .filter((word) => word.length > 0)
+        .map((w) => `${w}*`)
+        .join(" ");
 
-    const ftsTotal = db
-      .prepare(
-        `
-      SELECT COUNT(*) as total
-      FROM pickup_points p
-      JOIN pickup_points_fts f ON f.map_point_id = p.map_point_id
-      WHERE pickup_points_fts MATCH ?
-        AND p.enabled = 1
-    `,
-      )
-      .get(ftsQuery) as { total: number };
+      const ftsRows = db
+        .prepare(
+          `
+          SELECT p.*
+          FROM pickup_points p
+          JOIN pickup_points_fts f ON f.map_point_id = p.map_point_id
+          WHERE f.pickup_points_fts MATCH ?
+            AND p.enabled = 1
+          ORDER BY rank
+          LIMIT ? OFFSET ?
+        `,
+        )
+        .all(ftsQuery, limit, offset) as PickupPointRow[];
 
-    rows = ftsRows;
-    total = ftsTotal.total;
+      const ftsTotal = db
+        .prepare(
+          `
+          SELECT COUNT(*) as total
+          FROM pickup_points p
+          JOIN pickup_points_fts f ON f.map_point_id = p.map_point_id
+          WHERE f.pickup_points_fts MATCH ?
+            AND p.enabled = 1
+        `,
+        )
+        .get(ftsQuery) as { total: number };
+
+      rows = ftsRows;
+      total = ftsTotal.total;
+    } else {
+      // Если в строке были только спецсимволы, возвращаем пустой результат
+      rows = [];
+      total = 0;
+    }
   } else {
     // Без поиска — обычная пагинация
     rows = db
