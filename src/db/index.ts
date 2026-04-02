@@ -19,7 +19,7 @@ function initDatabase(): Database {
   // Включаем WAL для производительности
   db.run("PRAGMA journal_mode = WAL;");
   db.run("PRAGMA synchronous = NORMAL;");
-  db.run("PRAGMA cache_size = -64000;"); // 64MB cache
+  db.run("PRAGMA cache_size = -16000;"); // 16MB cache
   db.run("PRAGMA temp_store = MEMORY;");
 
   // Создаём таблицы

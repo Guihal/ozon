@@ -61,7 +61,39 @@ interface PickupPointRow {
 }
 
 /**
+ * Сохраняет одну точку в БД (для batch-by-batch записи)
+ */
+function insertPoint(point: PickupPointInfoItem): void {
+  const dm = point.delivery_method;
+  const { lat, long } = dm.coordinates;
+
+  insertStmt.run(
+    dm.map_point_id,
+    point.enabled ? 1 : 0,
+    dm.name,
+    dm.address,
+    dm.address_details.city,
+    dm.address_details.region,
+    dm.address_details.street,
+    dm.address_details.house,
+    dm.description,
+    lat,
+    long,
+    dm.location_id,
+    dm.delivery_type.id,
+    dm.delivery_type.name,
+    dm.fitting_rooms_count,
+    dm.pvz_rating,
+    dm.storage_period,
+    JSON.stringify(dm.working_hours),
+    JSON.stringify(dm.properties),
+    JSON.stringify(dm.images),
+  );
+}
+
+/**
  * Сохраняет массив точек в базу данных (транзакцией)
+ * Используется только для совместимости, предпочтительнее fetchAndSaveBatch
  */
 function savePointsToDb(points: PickupPointInfoItem[]): void {
   const total = points.length;
@@ -69,31 +101,7 @@ function savePointsToDb(points: PickupPointInfoItem[]): void {
 
   const insertMany = db.transaction((items: PickupPointInfoItem[]) => {
     for (const point of items) {
-      const dm = point.delivery_method;
-      const { lat, long } = dm.coordinates;
-
-      insertStmt.run(
-        dm.map_point_id,
-        point.enabled ? 1 : 0,
-        dm.name,
-        dm.address,
-        dm.address_details.city,
-        dm.address_details.region,
-        dm.address_details.street,
-        dm.address_details.house,
-        dm.description,
-        lat,
-        long,
-        dm.location_id,
-        dm.delivery_type.id,
-        dm.delivery_type.name,
-        dm.fitting_rooms_count,
-        dm.pvz_rating,
-        dm.storage_period,
-        JSON.stringify(dm.working_hours),
-        JSON.stringify(dm.properties),
-        JSON.stringify(dm.images),
-      );
+      insertPoint(point);
     }
   });
 
@@ -103,13 +111,12 @@ function savePointsToDb(points: PickupPointInfoItem[]): void {
 
 /**
  * Получает детальную информацию о всех точках пачками
+ * и СОХРАНЯЕТ В БД ПО МЕРЕ ПОЛУЧЕНИЯ (не копит в памяти)
  */
-async function fetchAllPointsInfo(
-  points: PickupPointItem[],
-): Promise<PickupPointInfoItem[]> {
-  const allInfo: PickupPointInfoItem[] = [];
+async function fetchAllPointsInfo(points: PickupPointItem[]): Promise<void> {
   const totalPoints = points.length;
   const batches = Math.ceil(totalPoints / BATCH_SIZE);
+  let totalSaved = 0;
 
   console.log(
     `🔄 Получение детальной информации: ${totalPoints} точек, ${batches} пачек`,
@@ -126,8 +133,17 @@ async function fetchAllPointsInfo(
       console.log(`📦 Пачка ${i + 1}/${batches} (точки ${start + 1}-${end})`);
 
       const response = await getPickupPointsInfo(batchIds);
-      allInfo.push(...response.points);
 
+      // Сохраняем пачку сразу в БД транзакцией — НЕ копим в памяти
+      const saveBatch = db.transaction((items: PickupPointInfoItem[]) => {
+        for (const point of items) {
+          insertPoint(point);
+        }
+      });
+      saveBatch(response.points);
+      totalSaved += response.points.length;
+
+      // Даём GC собрать response.points
       // Пауза между запросами
       if (i < batches - 1) {
         await new Promise((resolve) => setTimeout(resolve, 200));
@@ -137,10 +153,7 @@ async function fetchAllPointsInfo(
     }
   }
 
-  console.log(
-    `✅ Получена информация о ${allInfo.length} из ${totalPoints} точек`,
-  );
-  return allInfo;
+  console.log(`✅ Сохранено ${totalSaved} из ${totalPoints} точек в SQLite`);
 }
 
 /**
@@ -272,10 +285,8 @@ export async function initializePickupPointsCache(): Promise<void> {
     console.log("📍 Шаг 1: Получение базового списка точек...");
     const listResponse = await getPickupPointsList();
 
-    console.log("📍 Шаг 2: Получение детальной информации...");
-    const infoData = await fetchAllPointsInfo(listResponse.points);
-
-    savePointsToDb(infoData);
+    console.log("📍 Шаг 2: Получение и сохранение детальной информации...");
+    await fetchAllPointsInfo(listResponse.points);
     console.log("✅ Кэш точек самовывоза успешно обновлён из API");
   } catch (error) {
     console.error("❌ Ошибка обновления кэша из API:", error);
@@ -302,8 +313,7 @@ export async function refreshPickupPointsCache(): Promise<void> {
 
   try {
     const listResponse = await getPickupPointsList();
-    const infoData = await fetchAllPointsInfo(listResponse.points);
-    savePointsToDb(infoData);
+    await fetchAllPointsInfo(listResponse.points);
     console.log("✅ Кэш точек самовывоза успешно обновлён");
   } catch (error) {
     console.error("❌ Ошибка обновления кэша:", error);
