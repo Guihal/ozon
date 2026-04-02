@@ -39,6 +39,7 @@ export async function getDeliveryPrice(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
+        delivery_schema: "MIX",
         delivery_type: {
           pick_up: { map_point_id: req.mapPointId },
         },

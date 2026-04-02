@@ -1,6 +1,8 @@
 <script>
   (function () {
     const BACKEND = "https://orderinme.fvds.ru";
+    const OZON_PICKUP_ID = "1655508112";
+    const OZON_COURIER_ID = "2127610442";
 
     function waitFor(getter, cb, ms = 200, max = 75) {
       let n = 0;
@@ -17,13 +19,67 @@
     let pendingMapToken = null;
     let searchDebounce = null;
 
-    // Функция загрузки точек для текущей области карты
+    /**
+     * Расчёт цены доставки Ozon
+     */
+    async function updateOzonPrice(serviceId, mapPointId) {
+      if (!mapPointId) return;
+      const phone =
+        document
+          .querySelector('input[name="phone"]')
+          ?.value.replace(/\D/g, "") || "";
+      if (window.tcart__preloader) window.tcart__preloader.show();
+      try {
+        const res = await fetch(`${BACKEND}/v1/delivery/price`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mapPointId: parseInt(mapPointId),
+            items: (window.tcart.products || []).map((p) => ({
+              sku: parseInt(p.sku) || 0,
+              quantity: parseInt(p.quantity),
+              offer_id: p.externalid || String(p.lid),
+            })),
+            buyerPhone: phone,
+          }),
+        });
+        const data = await res.json();
+        if (data.success && data.total_price) {
+          const service =
+            window.tcart_newDelivery.deliveryState.services[serviceId];
+          if (service) {
+            service.price = data.total_price.value;
+            if (data.delivery_date) service.days = data.delivery_date;
+            window.tcart__updateTotal();
+          }
+        }
+      } catch (e) {
+        console.warn("[OzonPatch] Price error:", e);
+      } finally {
+        if (window.tcart__preloader) window.tcart__preloader.hide();
+      }
+    }
+
+    /**
+     * Обновляет deliveryState.pickupList — merge точек без дублирования по id.
+     * КРИТИЧЕСКИ ВАЖНО: showPickupInfo ищет точку в pickupList.find(e => e.id == t).
+     * Без этого "окошко выбора" не появится.
+     */
+    function mergePickupList(delivery, newPoints) {
+      const existing = delivery.deliveryState.pickupList || [];
+      const map = new Map();
+      for (const p of existing) map.set(String(p.id), p);
+      for (const p of newPoints) map.set(String(p.id), p);
+      delivery.deliveryState.pickupList = Array.from(map.values());
+    }
+
+    /**
+     * Загрузка точек для текущего viewport карты.
+     * Вызывается при перемещении/зуме карты.
+     */
     async function loadPointsForViewport(map, delivery) {
       const zoom = map.getZoom();
-      if (zoom < 10) {
-        delivery.mapAddPoints(null, [], null);
-        return;
-      }
+      if (zoom < 10) return;
 
       const bounds = map.getBounds();
       const token = Symbol();
@@ -43,117 +99,232 @@
         });
 
         if (pendingMapToken !== token) return;
-
         const points = await res.json();
-        delivery.mapAddPoints(null, points, null);
+
+        // --- КРИТИЧЕСКОЕ: обновляем pickupList для showPickupInfo ---
+        mergePickupList(delivery, points);
+
+        // Обновляем autocompleteAddress для поиска по тексту
+        const sb = document.getElementById("pickup-searchbox");
+        if (sb) {
+          const sbId = sb.getAttribute("id");
+          if (!delivery.deliveryState.searchboxes[sbId])
+            delivery.deliveryState.searchboxes[sbId] = {};
+          // Merge — точки из разных viewport'ов
+          const existing =
+            delivery.deliveryState.searchboxes[sbId].autocompleteAddress || [];
+          const map2 = new Map();
+          for (const p of existing) map2.set(String(p.id), p);
+          for (const p of points) map2.set(String(p.id), p);
+          delivery.deliveryState.searchboxes[sbId].autocompleteAddress =
+            Array.from(map2.values());
+        }
+
+        // Ищем ПРАВИЛЬНЫЙ wrapper — pickup-searchbox!
+        // Это важно: внутри mapAddPoints → tcart__chosePointOnMap
+        // вызывается n.querySelector(".searchbox-input")
+        let deliveryWrapper =
+          document.getElementById("pickup-searchbox") ||
+          document.getElementById("customdelivery") ||
+          document.querySelector(".t-radio__wrapper-delivery");
+
+        if (!deliveryWrapper) {
+          console.error("[OzonPatch] Не удалось найти контейнер доставки");
+          return;
+        }
+
+        // Отключаем прыжки камеры
+        const originalSetBounds = map.setBounds;
+        map.setBounds = function () {
+          return Promise.resolve();
+        };
+
+        // Вызываем метод Тильды для добавления точек на карту
+        delivery.mapAddPoints(null, points, deliveryWrapper);
+
+        // Возвращаем штатный метод
+        setTimeout(() => {
+          map.setBounds = originalSetBounds;
+        }, 150);
       } catch (e) {
-        console.warn("[OzonPatch] Ошибка загрузки карты:", e);
+        console.warn("[OzonPatch] Ошибка загрузки точек:", e);
       }
     }
 
     waitFor(
       () => window.tcart_newDelivery,
       (delivery) => {
-        // --- 1. ПАТЧ ПОИСКА (Живой поиск через Input) ---
+        // ==============================================
+        // 1. ПАТЧ changePickupHandler
+        // Вызывается из:
+        //   - tcart__chosePointOnMap (клик на карте)
+        //   - choseSearchListItemHandler (клик в выпадающем списке)
+        // Заменяет сломанные патчи selectPickupPoint (#2 и #5)
+        // ==============================================
+        const origChangePickup = delivery.changePickupHandler;
+        delivery.changePickupHandler = function (
+          pointId,
+          name,
+          postalCode,
+          wrapper,
+          address,
+          coords,
+        ) {
+          // Оригинал: обновит input value, postalCode, вызовет updateDeliveryPrice
+          origChangePickup.apply(this, arguments);
 
-        const origChangeSearchboxHandler = delivery.changeSearchboxInputHandler;
+          // Заполняем скрытые инпуты формы Тильды
+          const nameInput = document.querySelector(
+            '.t706 [name="tildadelivery-pickup-name"]',
+          );
+          const addrInput = document.querySelector(
+            '.t706 [name="tildadelivery-pickup-address"]',
+          );
 
-        // Перехватываем метод с сохранением всех трех аргументов Tilda
-        delivery.changeSearchboxInputHandler = function (t, r, n) {
-          const i = this; // Контекст delivery
-          const a = r ? r.querySelector(".searchbox-input") : null;
-          const o = r ? r.querySelector(".searchbox-list") : null;
-
-          // Если это не поиск ПВЗ или введено мало символов — отдаем управление оригиналу
-          const pattern = a && a.value ? a.value.trim() : "";
-          if (n !== "pickup" || pattern.length < 3) {
-            return origChangeSearchboxHandler.call(this, t, r, n);
+          if (nameInput && name) {
+            nameInput.value = name;
+            nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+            nameInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          if (addrInput && address) {
+            addrInput.value = address;
+            addrInput.dispatchEvent(new Event("input", { bubbles: true }));
+            addrInput.dispatchEvent(new Event("change", { bubbles: true }));
           }
 
-          // Если мы здесь — это живой поиск ПВЗ (n === "pickup")
+          // Принудительно сохраняем корзину
+          if (typeof window.tcart__cart_save === "function") {
+            window.tcart__cart_save();
+          }
+
+          // Расчёт цены Ozon
+          updateOzonPrice(OZON_PICKUP_ID, pointId);
+        };
+
+        // ==============================================
+        // 2. ПАТЧ ПОИСКА — changeSearchboxInputHandler
+        // ==============================================
+        const origSearch = delivery.changeSearchboxInputHandler;
+        delivery.changeSearchboxInputHandler = function (t, r, n) {
+          const input = r ? r.querySelector(".searchbox-input") : null;
+          const sbId = r ? r.getAttribute("id") : null;
+
+          // Для pickup — перехватываем поиск полностью
+          if (n !== "pickup" || input?.value.trim().length < 3)
+            return origSearch.apply(this, arguments);
+
           clearTimeout(searchDebounce);
           searchDebounce = setTimeout(() => {
-            if (window.tcart__preloader) window.tcart__preloader.show();
+            fetch(
+              `${BACKEND}/v1/delivery/pvz?q=${encodeURIComponent(input.value)}`,
+            )
+              .then((resp) => resp.json())
+              .then((data) => {
+                const points = data.pvz || [];
 
-            // Вызываем ваш API через существующий getPickupList
-            i.getPickupList({
-              pattern: pattern,
-              onDone: (points) => {
-                if (window.tcart__preloader) window.tcart__preloader.hide();
+                // Снимаем loading-состояние
+                r.classList.remove("load");
+                input.readOnly = false;
 
-                // 1. Обновляем локальный стейт Tilda, чтобы она "видела" эти точки
-                const searchboxId = r.getAttribute("id");
-                if (!i.deliveryState.searchboxes[searchboxId]) {
-                  i.deliveryState.searchboxes[searchboxId] = {};
+                if (points.length === 0) {
+                  const listEl = r.querySelector(".searchbox-list");
+                  if (listEl) {
+                    listEl.innerHTML =
+                      '<div class="searchbox-list-item t-text" style="user-select: none; pointer-events: none;">Ничего не найдено</div>';
+                  }
+                  return;
                 }
-                // Записываем точки в стейт, откуда Tilda их берет при клике
-                i.deliveryState.searchboxes[searchboxId].autocompleteAddress =
+
+                // --- КРИТИЧЕСКОЕ: обновляем стейт ---
+                // 1. autocompleteAddress — для локальной фильтрации при следующем вводе
+                if (!this.deliveryState.searchboxes[sbId])
+                  this.deliveryState.searchboxes[sbId] = {};
+                this.deliveryState.searchboxes[sbId].autocompleteAddress =
                   points;
-                i.searchList = points;
 
-                // 2. Отрисовываем список (передаем контейнер 'o', данные и тип)
-                i.fillSearchList(o, points, "pickup");
+                // 2. searchList — для поиска точки по id при клике
+                this.searchList = points;
 
-                // 3. Вешаем обработчики клика на новые элементы списка
-                i.choseSearchListItemHandler(r, n);
+                // 3. pickupList — для showPickupInfo (окошко выбора)
+                mergePickupList(this, points);
 
-                // Показываем список, если он пуст или скрыт
-                if (o) o.style.display = "block";
-              },
-              onFail: () => {
-                if (window.tcart__preloader) window.tcart__preloader.hide();
-                if (o)
-                  o.innerHTML =
-                    '<div class="searchbox-list-item t-text">' +
-                    t_delivery__dict("noResult") +
-                    "</div>";
-              },
-            });
+                // Заполняем список и навешиваем обработчики клика
+                const listEl = r.querySelector(".searchbox-list");
+                this.fillSearchList(listEl, points, "pickup");
+                this.choseSearchListItemHandler(r, n);
+              })
+              .catch((err) => {
+                console.warn("[OzonPatch] Search error:", err);
+                r.classList.remove("load");
+                input.readOnly = false;
+              });
           }, 400);
         };
 
-        // --- 2. ПАТЧ КАРТЫ (Загрузка по движению) ---
+        // ==============================================
+        // 3. ЗАГЛУШКА getPickupList
+        // Чтобы Тильда не грузила ПВЗ через свой API
+        // ==============================================
+        delivery.getPickupList = (p) => {
+          // Первый вызов при инициализации — без pattern
+          if (!("pattern" in p)) {
+            // Возвращаем пустой массив, чтобы рендер прошёл,
+            // но сами ПВЗ будем грузить через loadPointsForViewport
+            p.onDone([]);
+          }
+          // Вызовы с pattern (поиск) — игнорируем,
+          // поиск перехвачен в патче changeSearchboxInputHandler
+        };
 
-        const origMapInit = delivery.mapInit?.bind(delivery);
+        // ==============================================
+        // 4. ПАТЧ ИНИЦИАЛИЗАЦИИ КАРТЫ
+        // ==============================================
+        const origMapInit = delivery.mapInit;
         delivery.mapInit = function (...args) {
-          const result = origMapInit?.(...args);
-
+          const res = origMapInit.apply(this, args);
           waitFor(
             () => window.t_delivery__map,
             (map) => {
-              let debounce = null;
               map.events.add("boundschange", () => {
-                clearTimeout(debounce);
-                debounce = setTimeout(
+                clearTimeout(searchDebounce);
+                searchDebounce = setTimeout(
                   () => loadPointsForViewport(map, delivery),
                   400,
                 );
               });
+              // Первая загрузка точек
               loadPointsForViewport(map, delivery);
             },
           );
-
-          return result;
+          return res;
         };
 
-        // --- 3. ОБЩИЙ МЕТОД ПОЛУЧЕНИЯ ДАННЫХ ---
+        // ==============================================
+        // 5. ПРОВЕРКА ТЕЛЕФОНА
+        // ==============================================
+        document.body.addEventListener(
+          "blur",
+          async (e) => {
+            if (e.target.name === "phone") {
+              const phone = e.target.value.replace(/\D/g, "");
+              if (phone.length === 11) {
+                fetch(`${BACKEND}/v1/delivery/check`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ client_phone: phone }),
+                })
+                  .then((r) => r.json())
+                  .then((d) => {
+                    if (d.allowed === false)
+                      alert("Доставка Ozon недоступна для этого номера");
+                  });
+              }
+            }
+          },
+          true,
+        );
 
-        delivery.getPickupList = function (params) {
-          if ("pattern" in params) {
-            // Текстовый поиск
-            fetch(
-              `${BACKEND}/v1/delivery/pvz?q=${encodeURIComponent(params.pattern)}&limit=50`,
-            )
-              .then((r) => r.json())
-              .then((data) => params.onDone(data.pvz ?? []))
-              .catch(() => params.onFail?.());
-          } else {
-            // Инициализация карты (возвращаем пусто, точки загрузятся через boundschange)
-            params.onDone([]);
-          }
-        };
-
-        console.log("[OzonPatch] Интеграция Ozon (Поиск + Карта) активна ✓");
+        console.log("[OzonPatch] V3 — исправленный выбор ПВЗ ✓");
       },
     );
   })();
