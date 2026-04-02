@@ -32,6 +32,25 @@ export async function getDeliveryPrice(
     console.log(`🔄 Получение цены доставки для точки ${req.mapPointId}...`);
 
     // /v2/delivery/checkout — проверяем доступность и получаем цену
+
+    // Формируем items: Ozon требует хотя бы одно из sku (>0) или offer_id (непустая строка)
+    const items = req.items
+      .map((item) => {
+        const obj: Record<string, any> = { quantity: item.quantity };
+        if (item.sku && item.sku > 0) {
+          obj.sku = item.sku;
+        }
+        if (item.offer_id && item.offer_id.trim() !== "") {
+          obj.offer_id = item.offer_id;
+        }
+        return obj;
+      })
+      .filter((item) => item.sku || item.offer_id);
+
+    if (items.length === 0) {
+      throw new Error("Нет товаров с валидным SKU или offer_id");
+    }
+
     const response = await fetch(`${ozonConfig.apiUrl}/v2/delivery/checkout`, {
       method: "POST",
       headers: {
@@ -43,7 +62,7 @@ export async function getDeliveryPrice(
         delivery_type: {
           pick_up: { map_point_id: req.mapPointId },
         },
-        items: req.items,
+        items,
       }),
     });
 
