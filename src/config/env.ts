@@ -119,6 +119,9 @@ export const ozonConfig = {
   // Server port
   port: port,
 
+  // Tilda webhook
+  tildaWebhookApiKey: process.env.TILDA_WEBHOOK_API_KEY || "",
+
   // Validation helpers
   isConfigured: missingVars.length === 0 && emptyVars.length === 0,
   missingVars,

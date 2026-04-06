@@ -9,6 +9,7 @@ import {
 } from "../../services/pickup-points-cache";
 import { appendFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
+import { ozonConfig } from "../../config/env";
 
 export const delivery = new Elysia({ prefix: "/v1" })
   .post(
@@ -56,7 +57,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
   // Endpoint для создания заказа — пока логируем входящий запрос целиком
   .post(
     "/order/create",
-    async ({ body, request, headers }) => {
+    async ({ body, request, headers, set }) => {
       try {
         const sourceIp =
           headers["x-forwarded-for"] ||
@@ -69,6 +70,17 @@ export const delivery = new Elysia({ prefix: "/v1" })
           headers["referer"] || request.headers.get("referer") || "";
         const userAgent =
           headers["user-agent"] || request.headers.get("user-agent") || "";
+
+        // Проверка API-ключа от Тильды
+        const apiKey =
+          headers["api-key"] || request.headers.get("api-key") || "";
+        const expectedKey = ozonConfig.tildaWebhookApiKey;
+
+        if (expectedKey && apiKey !== expectedKey) {
+          console.warn(`⚠️  /order/create — неверный API-ключ от ${sourceIp}`);
+          set.status = 403;
+          return { success: false, error: "Forbidden" };
+        }
 
         console.log("🛒 Получен запрос на создание заказа /order/create");
         console.log(`   Source IP: ${sourceIp}`);
@@ -85,6 +97,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
           origin,
           referer,
           user_agent: userAgent,
+          api_key_valid: !expectedKey || apiKey === expectedKey,
           headers: Object.fromEntries(
             [...request.headers.entries()].filter(
               ([k]) =>
