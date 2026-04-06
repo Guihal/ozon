@@ -79,14 +79,13 @@
     function getCartItems() {
       return (window.tcart.products || [])
         .map((p) => {
-          const skuStr = (p.sku || "").toString().trim();
-          const ozonSku = parseInt(skuStr) || 0;
+          const offerId = (p.sku || "").toString().trim();
           return {
-            sku: ozonSku > 0 ? ozonSku : undefined,
+            offer_id: offerId,
             quantity: parseInt(p.quantity) || 1,
           };
         })
-        .filter((p) => p.sku);
+        .filter((p) => p.offer_id !== "");
     }
 
     /**
