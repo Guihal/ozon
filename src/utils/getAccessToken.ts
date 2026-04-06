@@ -31,9 +31,6 @@ let tokenCache: {
   expires: Date.now(),
 };
 
-// Таймер автоматического обновления
-let autoRefreshTimer: NodeJS.Timeout | null = null;
-
 // Хранилище для state параметра (защита от CSRF)
 const stateCache: Map<string, number> = new Map();
 const STATE_EXPIRY_TIME = 10 * 60 * 1000; // 10 минут
@@ -58,12 +55,6 @@ function loadTokenFromFile(): void {
       tokenCache.value = data.access_token || null;
       tokenCache.refresh_token = data.refresh_token || null;
       tokenCache.expires = data.expires || Date.now();
-
-      // Восстанавливаем таймер обновления
-      const timeUntilExpiry = tokenCache.expires - Date.now();
-      if (timeUntilExpiry > 0 && tokenCache.refresh_token) {
-        scheduleAutoRefresh(timeUntilExpiry);
-      }
     }
   } catch (error) {
     console.warn("Не удалось загрузить токен из файла:", error);
@@ -208,8 +199,6 @@ export async function fetchAccessToken(
 
   saveTokenToFile();
 
-  scheduleAutoRefresh(data.expires_in);
-
   console.log(
     `Токен получен. Истекает через ${data.expires_in - Date.now() / 1000} секунд.`,
   );
@@ -232,45 +221,6 @@ export function getAccessToken(): string | null {
  */
 export function getRefreshToken(): string | null {
   return tokenCache.refresh_token;
-}
-
-/**
- * Планирование автоматического обновления токена
- * Обновляем за 24 часа до истечения срока действия
- */
-function scheduleAutoRefresh(expiresIn: number): void {
-  // Очищаем предыдущий таймер
-  if (autoRefreshTimer) {
-    clearTimeout(autoRefreshTimer);
-    autoRefreshTimer = null;
-  }
-
-  const refreshTime = expiresIn * 1000 - Date.now() - 60 * 1000;
-  // const refreshTime = 10000;
-
-  if (refreshTime > 0) {
-    console.log(
-      `Автообновление токена запланировано через ${Math.floor(refreshTime / 1000 / 60)} минут`,
-    );
-
-    autoRefreshTimer = setTimeout(async () => {
-      console.log("Автоматическое обновление токена...");
-      try {
-        if (tokenCache.refresh_token) {
-          await fetchAccessToken(
-            "refresh_token",
-            undefined,
-            tokenCache.refresh_token,
-          );
-          console.log("Токен успешно обновлён");
-        }
-      } catch (error) {
-        console.error("Ошибка при автоматическом обновлении токена:", error);
-      }
-    }, refreshTime);
-
-    autoRefreshTimer.unref(); // Не блокирует выход из процесса
-  }
 }
 
 /**
@@ -308,11 +258,6 @@ export function resetToken(): void {
     }
   } catch (error) {
     console.warn("Не удалось удалить файл токена:", error);
-  }
-
-  if (autoRefreshTimer) {
-    clearTimeout(autoRefreshTimer);
-    autoRefreshTimer = null;
   }
 
   console.log("Токен сброшен");

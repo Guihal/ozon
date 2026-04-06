@@ -151,6 +151,30 @@ export interface PickupPointsListResponse {
   points: PickupPointItem[];
 }
 
+// --- Delivery Map (Clusters) Types ---
+
+export interface MapViewport {
+  left_bottom: PickupPointCoordinate;
+  right_top: PickupPointCoordinate;
+}
+
+export interface MapCluster {
+  coordinate: PickupPointCoordinate;
+  is_same_building: boolean;
+  map_point_ids: string[];
+  points_count: number;
+  viewport: MapViewport;
+}
+
+export interface DeliveryMapRequest {
+  viewport: MapViewport;
+  zoom: number;
+}
+
+export interface DeliveryMapResponse {
+  clusters: MapCluster[];
+}
+
 // --- Pickup Point Info Types ---
 
 export interface PickupPointInfoRequest {
@@ -220,6 +244,113 @@ export interface PickupPointInfoItem {
 
 export interface PickupPointsInfoResponse {
   points: PickupPointInfoItem[];
+}
+
+// --- Order Create Types ---
+
+export interface OzonOrderBuyer {
+  first_name: string;
+  last_name: string;
+  phone: string;
+}
+
+export interface OzonOrderRecipient {
+  recipient_first_name: string;
+  recipient_last_name: string;
+  recipient_phone: string;
+}
+
+export interface OzonOrderDeliveryPickup {
+  pick_up: { map_point_id: number };
+}
+
+export interface OzonOrderDeliveryAddress {
+  address: {
+    coordinates: { lat: number; long: number };
+  };
+}
+
+export interface OzonOrderPrice {
+  currency_code: string;
+  units: number;
+  nanos: number;
+}
+
+export interface OzonOrderSplitItem {
+  offer_id: string;
+  quantity: number;
+  sku: number;
+}
+
+export interface OzonOrderDeliveryMethod {
+  delivery_method_id: number;
+  delivery_type: "PICKUP" | "COURIER";
+  logistic_date_range: { from: string; to: string };
+  timeslot_id: number;
+}
+
+export interface OzonOrderSplit {
+  delivery_method: OzonOrderDeliveryMethod;
+  items: OzonOrderSplitItem[];
+  warehouse_id: number;
+}
+
+export interface OzonOrderCreateRequest {
+  buyer: OzonOrderBuyer;
+  delivery: OzonOrderDeliveryPickup | OzonOrderDeliveryAddress;
+  delivery_schema: "MIX";
+  recipient: OzonOrderRecipient;
+  splits: OzonOrderSplit[];
+}
+
+export interface OzonOrderCreateResponse {
+  order_number: string;
+  postings: string[];
+}
+
+// --- Tilda Webhook Types ---
+
+export interface TildaWebhookProduct {
+  name: string;
+  quantity: number;
+  amount: number;
+  externalid: string;
+  img: string;
+  pack_m: string;
+  pack_x: string;
+  pack_y: string;
+  pack_z: string;
+  price: number;
+  sku: string;
+}
+
+export interface TildaWebhookPayment {
+  sys: string;
+  systranid: string;
+  orderid: string;
+  products: TildaWebhookProduct[];
+  amount: string;
+  subtotal: string;
+  delivery: string;
+  delivery_price: number;
+  delivery_fio: string;
+  delivery_city: string;
+  delivery_address: string;
+  delivery_comment: string;
+  delivery_pickup_id: string;
+  delivery_zip: string;
+}
+
+export interface TildaWebhookBody {
+  Name: string;
+  Phone: string;
+  Email: string;
+  payment: TildaWebhookPayment;
+  formid: string;
+  formname: string;
+  ozon_map_point_id?: string;
+  ozon_delivery_type?: string;
+  [key: string]: unknown;
 }
 
 // --- Tilda Integration Types ---

@@ -1,11 +1,14 @@
 import { rateLimitedFetch } from "./rateLimiter";
 import { useFetch, type ApiResult } from "./useFetch";
+import { queuedOzonRequest } from "./requestQueue";
 import type {
   CheckDeliveryRequest,
   CheckDeliveryResponse,
   PickupPointsListResponse,
   PickupPointsInfoResponse,
   PickupPointInfoRequest,
+  DeliveryMapRequest,
+  DeliveryMapResponse,
 } from "../services/ozon-logistics/types";
 import type { TokenData } from "./getAccessToken";
 import { log, error as logError } from "./logger";
@@ -26,6 +29,10 @@ type OzonApiEndpointMap = {
   "/v1/delivery/point/info": {
     request: PickupPointInfoRequest;
     response: PickupPointsInfoResponse;
+  };
+  "/v1/delivery/map": {
+    request: DeliveryMapRequest;
+    response: DeliveryMapResponse;
   };
 };
 
@@ -57,44 +64,30 @@ export class OzonApiClient {
 
   /**
    * Выполняет типизированный запрос к API Ozon
+   * При 401 автоматически обновляет токен и повторяет запрос.
+   * Если refresh не удался — ставит запрос в очередь и шлёт email.
+   * Endpoint /v1/delivery/map не ставится в очередь.
+   *
    * @param endpoint - endpoint из маппинга (с автокомплитом)
    * @param body - тело запроса (типизировано)
    * @returns типизированный response
+   * @throws если запрос поставлен в очередь (с пометкой queued)
    */
   async call<K extends keyof OzonApiEndpointMap>(
     endpoint: K,
     body?: OzonApiEndpointMap[K]["request"],
   ): Promise<OzonApiEndpointMap[K]["response"]> {
-    const url = new URL(endpoint, this.baseUrl);
+    const result = await queuedOzonRequest(endpoint, "POST", body ?? {});
 
-    try {
-      const response = await rateLimitedFetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.token}`,
-        },
-        body: JSON.stringify(body ?? {}),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error(
-          `❌ Ozon API Error (${endpoint}):`,
-          response.status,
-          errorData,
-        );
-        throw new Error(
-          `Ozon API Error: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      return response.json() as Promise<OzonApiEndpointMap[K]["response"]>;
-    } catch (error) {
-      console.error(`❌ Error calling ${endpoint}:`, error);
-      throw error;
+    if (result.queued) {
+      const err = new Error(
+        "Запрос поставлен в очередь — требуется авторизация",
+      );
+      (err as any).queued = true;
+      throw err;
     }
+
+    return result.data as OzonApiEndpointMap[K]["response"];
   }
 
   /**

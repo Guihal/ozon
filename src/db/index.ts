@@ -102,6 +102,45 @@ function initDatabase(): Database {
 
   console.log("✅ SQLite база данных инициализирована:", DB_FILE);
 
+  // Таблица маппинга SKU: Tilda externalid → Ozon sku + offer_id
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sku_mapping (
+      tilda_externalid TEXT PRIMARY KEY,
+      ozon_sku INTEGER NOT NULL,
+      ozon_offer_id TEXT NOT NULL,
+      product_name TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Таблица заказов для отслеживания
+  db.run(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tilda_order_id TEXT NOT NULL,
+      ozon_order_number TEXT,
+      ozon_postings TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      buyer_name TEXT,
+      buyer_phone TEXT,
+      buyer_email TEXT,
+      delivery_type TEXT,
+      delivery_address TEXT,
+      items_json TEXT,
+      webhook_body TEXT,
+      error_message TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_orders_tilda ON orders(tilda_order_id)",
+  );
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_orders_ozon ON orders(ozon_order_number)",
+  );
+
   return db;
 }
 

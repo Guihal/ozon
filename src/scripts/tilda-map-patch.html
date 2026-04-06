@@ -18,50 +18,125 @@
 
     let pendingMapToken = null;
     let searchDebounce = null;
+    let courierDebounce = null;
+
+    // ==============================================
+    // STATE MACHINE — готовность к покупке
+    // ==============================================
+    const ozonState = {
+      phoneChecked: false,
+      phoneValid: false,
+      deliverySelected: false,
+      deliveryType: null, // "pickup" | "courier" | null
+    };
+
+    function getErrorMessage() {
+      if (!ozonState.phoneValid) return "Введите номер телефона";
+      if (!ozonState.phoneChecked)
+        return "Доставка Ozon недоступна для этого номера";
+      if (!ozonState.deliverySelected)
+        return "Выберите пункт выдачи или введите адрес доставки";
+      return "";
+    }
+
+    function showOzonError(message) {
+      if (!message) return hideOzonError();
+      if (window.tcart__errorHandler && typeof window.tcart__errorHandler.show === "function") {
+        window.tcart__errorHandler.show(message);
+      }
+    }
+
+    function hideOzonError() {
+      if (window.tcart__errorHandler && typeof window.tcart__errorHandler.hide === "function") {
+        window.tcart__errorHandler.hide();
+      }
+    }
+
+    function updatePurchaseButton() {
+      const canPurchase =
+        ozonState.phoneChecked && ozonState.deliverySelected;
+      if (canPurchase) {
+        if (typeof window.tcart__unblockSubmitButton === "function") {
+          window.tcart__unblockSubmitButton();
+        }
+        hideOzonError();
+      } else {
+        if (typeof window.tcart__blockSubmitButton === "function") {
+          window.tcart__blockSubmitButton();
+        }
+        showOzonError(getErrorMessage());
+      }
+    }
 
     /**
-     * Расчёт цены доставки Ozon
+     * Получает items корзины в формате для API
+     */
+    function getCartItems() {
+      return (window.tcart.products || [])
+        .map((p) => {
+          const skuStr = (p.sku || "").toString().trim();
+          const ozonSku = parseInt(skuStr) || 0;
+          return {
+            sku: ozonSku,
+            quantity: parseInt(p.quantity) || 1,
+            offer_id: skuStr,
+          };
+        })
+        .filter((p) => p.sku > 0 || p.offer_id !== "");
+    }
+
+    /**
+     * Получает телефон покупателя
+     */
+    function getPhone() {
+      return (
+        document
+          .querySelector('input[name="phone"]')
+          ?.value.replace(/\D/g, "") || ""
+      );
+    }
+
+    /**
+     * Устанавливает hidden input для передачи через webhook
+     */
+    function setHiddenInput(name, value) {
+      let input = document.querySelector(`.t706 [name="${name}"]`);
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        const form = document.querySelector(".t706 form");
+        if (form) form.appendChild(input);
+      }
+      input.value = value;
+    }
+
+    /**
+     * Расчёт цены доставки Ozon (ПВЗ)
      */
     async function updateOzonPrice(serviceId, mapPointId) {
       if (!mapPointId) return;
-      const phone =
-        document
-          .querySelector('input[name="phone"]')
-          ?.value.replace(/\D/g, "") || "";
       if (window.tcart__preloader) window.tcart__preloader.show();
       try {
-        // Логируем содержимое корзины для отладки
-        console.log(
-          "[OzonPatch] Cart products:",
-          JSON.stringify(window.tcart.products),
-        );
-
         const res = await fetch(`${BACKEND}/v1/delivery/price`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mapPointId: parseInt(mapPointId),
-            items: (window.tcart.products || [])
-              .map((p) => {
-                const ozonSku = parseInt(p.sku);
-                const ozonOfferId = (p.sku && String(p.sku).trim()) || "";
-                return {
-                  sku: ozonSku > 0 ? ozonSku : 0,
-                  quantity: parseInt(p.quantity) || 1,
-                  offer_id: ozonOfferId,
-                };
-              })
-              .filter((p) => p.sku > 0 || p.offer_id !== ""),
-            buyerPhone: phone,
+            items: getCartItems(),
+            buyerPhone: getPhone(),
           }),
         });
         const data = await res.json();
-        if (data.success && data.total_price) {
+        if (data.success) {
           const service =
             window.tcart_newDelivery.deliveryState.services[serviceId];
           if (service) {
-            service.price = data.total_price.value;
+            if (data.total_price) service.price = data.total_price.value;
             if (data.delivery_date) service.days = data.delivery_date;
+            if (data.daysMin !== undefined && data.daysMax !== undefined) {
+              service.days = `${data.daysMin}-${data.daysMax} дн.`;
+            }
             window.tcart__updateTotal();
           }
         }
@@ -69,6 +144,85 @@
         console.warn("[OzonPatch] Price error:", e);
       } finally {
         if (window.tcart__preloader) window.tcart__preloader.hide();
+      }
+    }
+
+    /**
+     * Расчёт цены курьерской доставки Ozon
+     */
+    async function updateCourierPrice(serviceId, lat, lng) {
+      if (!lat || !lng) return;
+      if (window.tcart__preloader) window.tcart__preloader.show();
+      try {
+        const res = await fetch(`${BACKEND}/v1/delivery/courier/price`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            latitude: lat,
+            longitude: lng,
+            items: getCartItems(),
+            buyerPhone: getPhone(),
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          const service =
+            window.tcart_newDelivery.deliveryState.services[serviceId];
+          if (service) {
+            if (data.daysMin !== undefined && data.daysMax !== undefined) {
+              service.days = `${data.daysMin}-${data.daysMax} дн.`;
+            }
+            window.tcart__updateTotal();
+          }
+        } else {
+          console.warn("[OzonPatch] Courier price unavailable:", data.error);
+        }
+      } catch (e) {
+        console.warn("[OzonPatch] Courier price error:", e);
+      } finally {
+        if (window.tcart__preloader) window.tcart__preloader.hide();
+      }
+    }
+
+    /**
+     * Геокодинг адреса через серверный endpoint
+     * Используем Nominatim через backend
+     */
+    async function geocodeAndUpdateCourier(address) {
+      if (!address || address.trim().length < 5) return;
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
+            q: address,
+            format: "json",
+            countrycodes: "ru",
+            limit: "1",
+          })}`,
+          { headers: { "User-Agent": "OzonLogisticsIntegration/1.0" } },
+        );
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+          console.log(
+            `[OzonPatch] Geocoded "${address}" → ${lat}, ${lon}`,
+          );
+
+          // Сохраняем координаты и тип доставки
+          setHiddenInput("ozon_delivery_type", "courier");
+          setHiddenInput("ozon_map_point_id", "");
+
+          ozonState.deliverySelected = true;
+          ozonState.deliveryType = "courier";
+          updatePurchaseButton();
+          updateCourierPrice(OZON_COURIER_ID, lat, lon);
+        } else {
+          console.warn(`[OzonPatch] Geocode failed for: "${address}"`);
+          ozonState.deliverySelected = false;
+          updatePurchaseButton();
+        }
+      } catch (e) {
+        console.warn("[OzonPatch] Geocode error:", e);
       }
     }
 
@@ -185,6 +339,10 @@
           // Оригинал: обновит input value, postalCode, вызовет updateDeliveryPrice
           origChangePickup.apply(this, arguments);
 
+          // Сохраняем Ozon map_point_id и тип доставки в hidden inputs
+          setHiddenInput("ozon_map_point_id", pointId || "");
+          setHiddenInput("ozon_delivery_type", "pickup");
+
           // Заполняем скрытые инпуты формы Тильды
           const nameInput = document.querySelector(
             '.t706 [name="tildadelivery-pickup-name"]',
@@ -208,6 +366,11 @@
           if (typeof window.tcart__cart_save === "function") {
             window.tcart__cart_save();
           }
+
+          // Обновляем state
+          ozonState.deliverySelected = !!pointId;
+          ozonState.deliveryType = "pickup";
+          updatePurchaseButton();
 
           // Расчёт цены Ozon
           updateOzonPrice(OZON_PICKUP_ID, pointId);
@@ -301,7 +464,7 @@
                 clearTimeout(searchDebounce);
                 searchDebounce = setTimeout(
                   () => loadPointsForViewport(map, delivery),
-                  400,
+                  700,
                 );
               });
               // Первая загрузка точек
@@ -319,24 +482,137 @@
           async (e) => {
             if (e.target.name === "phone") {
               const phone = e.target.value.replace(/\D/g, "");
+              ozonState.phoneValid = phone.length === 11;
+
               if (phone.length === 11) {
-                fetch(`${BACKEND}/v1/delivery/check`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ client_phone: phone }),
-                })
-                  .then((r) => r.json())
-                  .then((d) => {
-                    if (d.allowed === false)
-                      alert("Доставка Ozon недоступна для этого номера");
+                try {
+                  const res = await fetch(`${BACKEND}/v1/delivery/check`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ client_phone: phone }),
                   });
+                  const d = await res.json();
+                  ozonState.phoneChecked = d.is_possible === true;
+                } catch (err) {
+                  console.warn("[OzonPatch] Phone check error:", err);
+                  ozonState.phoneChecked = false;
+                }
+              } else {
+                ozonState.phoneChecked = false;
               }
+              updatePurchaseButton();
             }
           },
           true,
         );
 
-        console.log("[OzonPatch] V3 — исправленный выбор ПВЗ ✓");
+        // Сброс при вводе нового телефона
+        document.body.addEventListener(
+          "input",
+          (e) => {
+            if (e.target.name === "phone") {
+              ozonState.phoneChecked = false;
+              updatePurchaseButton();
+            }
+          },
+          true,
+        );
+
+        // Блокируем кнопку при инициализации
+        updatePurchaseButton();
+
+        console.log("[OzonPatch] V4 — ПВЗ + курьер + блокировка кнопки ✓");
+
+        // ==============================================
+        // 6. КУРЬЕРСКАЯ ДОСТАВКА
+        // При выборе курьерской службы и вводе адреса → геокодинг → цена
+        // ==============================================
+
+        // Отслеживаем переключение на курьерскую доставку
+        function watchCourierAddress() {
+          // Слушаем изменения в полях адреса курьерской доставки
+          const addressSelectors = [
+            'input[name="tildadelivery-address"]',
+            'input[name="delivery_address"]',
+            '.t-input-group_da input',
+          ];
+
+          for (const sel of addressSelectors) {
+            const inputs = document.querySelectorAll(sel);
+            inputs.forEach((input) => {
+              if (input.dataset.ozonCourierBound) return;
+              input.dataset.ozonCourierBound = "1";
+
+              // При потере фокуса — геокодим полный адрес
+              input.addEventListener("blur", () => {
+                const activeService =
+                  delivery.deliveryState.selectedService;
+                if (activeService !== OZON_COURIER_ID) return;
+
+                clearTimeout(courierDebounce);
+                courierDebounce = setTimeout(() => {
+                  // Собираем полный адрес из полей Тильды
+                  const city =
+                    document.querySelector(
+                      'input[name="tildadelivery-city"]',
+                    )?.value || "";
+                  const street =
+                    document.querySelector(
+                      'input[name="tildadelivery-street"]',
+                    )?.value || "";
+                  const house =
+                    document.querySelector(
+                      'input[name="tildadelivery-house"]',
+                    )?.value || "";
+                  const fullAddress =
+                    input.value || [city, street, house].filter(Boolean).join(", ");
+
+                  if (fullAddress.length >= 5) {
+                    geocodeAndUpdateCourier(fullAddress);
+                  }
+                }, 500);
+              });
+            });
+          }
+        }
+
+        // Отслеживаем переключение типа доставки (radio кнопки)
+        const observer = new MutationObserver(() => {
+          watchCourierAddress();
+        });
+        const cartContainer =
+          document.querySelector(".t706") ||
+          document.querySelector(".t-store__cart");
+        if (cartContainer) {
+          observer.observe(cartContainer, {
+            childList: true,
+            subtree: true,
+          });
+        }
+
+        // Перехватываем выбор службы доставки
+        const origSelectService = delivery.selectDeliveryService;
+        if (origSelectService) {
+          delivery.selectDeliveryService = function () {
+            origSelectService.apply(this, arguments);
+
+            const activeService = this.deliveryState.selectedService;
+            if (activeService === OZON_COURIER_ID) {
+              setHiddenInput("ozon_delivery_type", "courier");
+              setHiddenInput("ozon_map_point_id", "");
+              ozonState.deliverySelected = false;
+              ozonState.deliveryType = "courier";
+              updatePurchaseButton();
+              // Попробовать геокодить уже введённый адрес
+              setTimeout(() => watchCourierAddress(), 300);
+            } else {
+              // Переключились на ПВЗ — сбрасываем выбор
+              ozonState.deliverySelected = false;
+              ozonState.deliveryType = null;
+              updatePurchaseButton();
+            }
+          };
+        }
       },
     );
   })();

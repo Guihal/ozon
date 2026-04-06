@@ -15,6 +15,7 @@ import {
   createHTMLResponse,
 } from "../../utils/htmlResponses";
 import { refreshPickupPointsCache } from "../../services/pickup-points-cache";
+import { replayQueue } from "../../utils/requestQueue";
 
 /**
  * Auth module for Ozon OAuth integration
@@ -96,6 +97,19 @@ export const auth = new Elysia({ prefix: "/auth" })
         refreshPickupPointsCache().catch((err) => {
           console.error("❌ Ошибка обновления кэша ПВЗ после логина:", err);
         });
+
+        // Воспроизводим очередь запросов, накопленную за время без токена
+        replayQueue()
+          .then((result) => {
+            if (result.total > 0) {
+              console.log(
+                `📋 Очередь: ${result.success}/${result.total} успешно`,
+              );
+            }
+          })
+          .catch((err) => {
+            console.error("❌ Ошибка воспроизведения очереди:", err);
+          });
 
         // Return HTML response for browser
         const html = generateSuccessHTML({

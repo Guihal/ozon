@@ -122,6 +122,14 @@ export const ozonConfig = {
   // Tilda webhook
   tildaWebhookApiKey: process.env.TILDA_WEBHOOK_API_KEY || "",
 
+  // SMTP для уведомлений
+  smtpHost: process.env.SMTP_HOST || "",
+  smtpPort: parseInt(process.env.SMTP_PORT || "587", 10),
+  smtpUser: process.env.SMTP_USER || "",
+  smtpPass: process.env.SMTP_PASS || "",
+  smtpFrom: process.env.SMTP_FROM || process.env.SMTP_USER || "",
+  notifyEmail: process.env.NOTIFY_EMAIL || "",
+
   // Validation helpers
   isConfigured: missingVars.length === 0 && emptyVars.length === 0,
   missingVars,

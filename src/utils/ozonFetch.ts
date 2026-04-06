@@ -12,7 +12,11 @@
 
 import { rateLimitedFetch } from "./rateLimiter";
 import { useFetch, type ApiResult } from "./useFetch";
-import { getAccessToken } from "./getAccessToken";
+import {
+  getAccessToken,
+  getRefreshToken,
+  fetchAccessToken,
+} from "./getAccessToken";
 import { ozonConfig } from "../config/env";
 import { error as logError } from "./logger";
 import type {
@@ -43,11 +47,49 @@ import type {
  *   console.log(result.response.points.length);
  * }
  */
+async function doRequest<K extends keyof OzonApiEndpointMap>(
+  endpoint: K,
+  body: OzonApiEndpointMap[K]["request"] | undefined,
+  token: string,
+): Promise<{ data: OzonApiEndpointMap[K]["response"]; httpStatus: number }> {
+  const url = new URL(endpoint, ozonConfig.apiUrl);
+
+  const response = await rateLimitedFetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body ?? {}),
+    signal: AbortSignal.timeout(ozonConfig.timeoutMs),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    if (response.status !== 401) {
+      logError(
+        `❌ Ozon API Error (${endpoint}): ${response.status}`,
+        errorData,
+      );
+    }
+    const err: Record<string, unknown> =
+      typeof errorData === "object" && errorData !== null
+        ? (errorData as Record<string, unknown>)
+        : {};
+    err._httpStatus = response.status;
+    throw err;
+  }
+
+  return {
+    data: (await response.json()) as OzonApiEndpointMap[K]["response"],
+    httpStatus: response.status,
+  };
+}
+
 export async function ozonFetch<K extends keyof OzonApiEndpointMap>(
   endpoint: K,
   body?: OzonApiEndpointMap[K]["request"],
 ): Promise<ApiResult<OzonApiEndpointMap[K]["response"]>> {
-  // Получаем токен из кэша
   const token = getAccessToken();
   if (!token) {
     return {
@@ -60,30 +102,31 @@ export async function ozonFetch<K extends keyof OzonApiEndpointMap>(
     };
   }
 
-  // Используем useFetch для безопасной обработки ошибок
   return useFetch(async () => {
-    const url = new URL(endpoint, ozonConfig.apiUrl);
-
-    const response = await rateLimitedFetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body ?? {}),
-      signal: AbortSignal.timeout(ozonConfig.timeoutMs),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      logError(
-        `❌ Ozon API Error (${endpoint}): ${response.status}`,
-        errorData,
-      );
-      throw errorData;
+    try {
+      const { data } = await doRequest(endpoint, body, token);
+      return data;
+    } catch (err: unknown) {
+      const httpStatus = (err as Record<string, unknown>)?._httpStatus;
+      if (httpStatus === 401) {
+        const refreshToken = getRefreshToken();
+        if (refreshToken) {
+          console.log("🔄 Access token истёк, обновляем и повторяем запрос...");
+          const newTokenData = await fetchAccessToken(
+            "refresh_token",
+            undefined,
+            refreshToken,
+          );
+          const { data } = await doRequest(
+            endpoint,
+            body,
+            newTokenData.access_token,
+          );
+          return data;
+        }
+      }
+      throw err;
     }
-
-    return response.json() as Promise<OzonApiEndpointMap[K]["response"]>;
   });
 }
 

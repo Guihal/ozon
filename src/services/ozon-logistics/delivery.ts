@@ -5,6 +5,8 @@ import type {
   CheckDeliveryResponse,
   PickupPointsListResponse,
   PickupPointsInfoResponse,
+  DeliveryMapResponse,
+  MapViewport,
 } from "./types";
 
 /**
@@ -120,6 +122,36 @@ export async function getPickupPointsInfo(
     return data;
   } catch (error) {
     console.error("❌ Ошибка при получении информации о точках:", error);
+    throw error;
+  }
+}
+
+/**
+ * Проксирует запрос карты к Ozon API /v1/delivery/map
+ * Возвращает кластеры с координатами и map_point_ids
+ */
+export async function getDeliveryMapClusters(
+  viewport: MapViewport,
+  zoom: number,
+): Promise<DeliveryMapResponse> {
+  const token = getAccessToken();
+  if (!token) {
+    console.error("❌ Токен авторизации не найден");
+    throw new Error("Требуется авторизация");
+  }
+
+  try {
+    const client = new OzonApiClient(
+      ozonConfig.apiUrl,
+      token,
+      ozonConfig.timeoutMs,
+    );
+    const data = await client.call("/v1/delivery/map", { viewport, zoom });
+
+    console.log(`✅ Ozon /v1/delivery/map: ${data.clusters.length} кластеров`);
+    return data;
+  } catch (error) {
+    console.error("❌ Ошибка при запросе Ozon /v1/delivery/map:", error);
     throw error;
   }
 }

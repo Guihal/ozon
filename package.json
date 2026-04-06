@@ -8,10 +8,12 @@
     "db:rebuild-fts": "bun run src/scripts/rebuild-fts.ts"
   },
   "dependencies": {
+    "@elysiajs/cors": "latest",
     "elysia": "latest",
-    "@elysiajs/cors": "latest"
+    "nodemailer": "^8.0.4"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.0",
     "bun-types": "latest"
   },
   "module": "src/index.js"

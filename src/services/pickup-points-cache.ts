@@ -304,10 +304,30 @@ export function getAllTildaPickupPoints(): TildaPickupPoint[] {
   return rows.map(mapRowToTilda);
 }
 
+// Лёгкая строка из viewport-запроса (без тяжёлых JSON-полей)
+interface PickupPointLightRow {
+  map_point_id: number;
+  name: string;
+  address: string;
+  description: string;
+  lat: number;
+  long: number;
+}
+
+// Prepared statement для viewport — выбираем только нужные поля
+const viewportStmt = db.prepare(`
+  SELECT map_point_id, name, address, description, lat, long
+  FROM pickup_points
+  WHERE enabled = 1
+    AND lat BETWEEN ? AND ?
+    AND long BETWEEN ? AND ?
+  ORDER BY pvz_rating DESC
+  LIMIT ?
+`);
+
 /**
  * Получает ПВЗ из базы по viewport (области видимости карты)
- * Сортировка по рейтингу — при большом количестве точек
- * сначала показываем лучшие, остальные обрезает LIMIT.
+ * Оптимизировано: выбирает только нужные колонки, без JSON-парсинга
  */
 export function getTildaPickupPointsByViewport(options: {
   latMin: number;
@@ -316,22 +336,58 @@ export function getTildaPickupPointsByViewport(options: {
   lngMax: number;
   limit?: number;
 }): TildaPickupPoint[] {
-  const { latMin, latMax, lngMin, lngMax, limit = 300 } = options;
+  const { latMin, latMax, lngMin, lngMax, limit = 200 } = options;
 
+  const rows = viewportStmt.all(
+    latMin,
+    latMax,
+    lngMin,
+    lngMax,
+    limit,
+  ) as PickupPointLightRow[];
+
+  return rows.map((row) => ({
+    id: String(row.map_point_id),
+    name: `${row.name}: ${row.address}`,
+    address: row.address,
+    coordinates: [row.lat, row.long] as [number, number],
+    workTime: "",
+    phones: [],
+    addressComment: row.description,
+    cash: "n",
+    postalCode: "",
+  }));
+}
+
+/**
+ * Получает ПВЗ из базы по массиву map_point_ids
+ * Быстрый lookup по PK — используется для обогащения данных из Ozon /v1/delivery/map
+ */
+export function getTildaPickupPointsByIds(
+  mapPointIds: string[],
+): TildaPickupPoint[] {
+  if (mapPointIds.length === 0) return [];
+
+  const placeholders = mapPointIds.map(() => "?").join(",");
   const rows = db
     .prepare(
-      `
-    SELECT * FROM pickup_points
-    WHERE enabled = 1
-      AND lat BETWEEN ? AND ?
-      AND long BETWEEN ? AND ?
-    ORDER BY pvz_rating DESC
-    LIMIT ?
-  `,
+      `SELECT map_point_id, name, address, description, lat, long
+       FROM pickup_points
+       WHERE enabled = 1 AND map_point_id IN (${placeholders})`,
     )
-    .all(latMin, latMax, lngMin, lngMax, limit) as PickupPointRow[];
+    .all(...mapPointIds) as PickupPointLightRow[];
 
-  return rows.map(mapRowToTilda);
+  return rows.map((row) => ({
+    id: String(row.map_point_id),
+    name: `${row.name}: ${row.address}`,
+    address: row.address,
+    coordinates: [row.lat, row.long] as [number, number],
+    workTime: "",
+    phones: [],
+    addressComment: row.description,
+    cash: "n" as const,
+    postalCode: "",
+  }));
 }
 
 /**
