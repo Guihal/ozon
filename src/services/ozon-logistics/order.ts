@@ -129,6 +129,7 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
       courierCoords,
     );
     logger.log(`🔄 Checkout для заказа ${tildaOrderId}...`);
+    logger.log(`   Checkout body: ${JSON.stringify(checkoutBody)}`);
 
     const checkoutResult = await queuedOzonRequest(
       "/v2/delivery/checkout",
@@ -141,6 +142,7 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     }
 
     const checkoutData = checkoutResult.data as any;
+    logger.log(`   Checkout response: ${JSON.stringify(checkoutData)}`);
     const splits: OzonOrderSplit[] = [];
 
     if (!checkoutData.splits || checkoutData.splits.length === 0) {
@@ -178,17 +180,26 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
           },
           timeslot_id: timeslot.timeslot_id || 0,
         },
-        items:
-          split.items?.map((i: any) => ({
-            offer_id: i.offer_id || "",
-            quantity: i.quantity || 1,
-            sku: i.sku || 0,
-          })) ||
-          items.map((i) => ({
-            offer_id: i.offer_id,
-            quantity: i.quantity,
-            sku: i.sku,
-          })),
+        items: (split.items && split.items.length > 0
+          ? split.items.map((i: any) => {
+              // Берём sku/offer_id из checkout ответа, фоллбэк на наши items
+              const matchedItem = items.find(
+                (it) =>
+                  (i.sku && it.sku === i.sku) ||
+                  (i.offer_id && it.offer_id === i.offer_id),
+              );
+              return {
+                offer_id: i.offer_id || matchedItem?.offer_id || "",
+                quantity: i.quantity || matchedItem?.quantity || 1,
+                sku: i.sku || matchedItem?.sku || 0,
+              };
+            })
+          : items.map((i) => ({
+              offer_id: i.offer_id,
+              quantity: i.quantity,
+              sku: i.sku,
+            }))
+        ).filter((i: any) => i.sku > 0 || (i.offer_id && i.offer_id !== "")),
         warehouse_id: split.warehouse_id || 0,
       });
     }
@@ -233,6 +244,7 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     };
 
     logger.log(`🔄 Создание заказа ${tildaOrderId} в Ozon...`);
+    logger.log(`   Order body: ${JSON.stringify(orderBody)}`);
 
     const orderResult = await queuedOzonRequest(
       "/v2/order/create",
@@ -274,10 +286,7 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     const errorMsg =
       error instanceof Error ? error.message : JSON.stringify(error);
 
-    logger.critical(
-      `Ошибка создания заказа ${tildaOrderId}`,
-      errorMsg,
-    );
+    logger.critical(`Ошибка создания заказа ${tildaOrderId}`, errorMsg);
 
     // Обновляем статус в БД
     db.query(
