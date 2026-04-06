@@ -1,6 +1,7 @@
 import { rateLimitedFetch } from "./rateLimiter";
 import { useFetch, type ApiResult } from "./useFetch";
 import { queuedOzonRequest } from "./requestQueue";
+import * as logger from "./logger";
 import type {
   CheckDeliveryRequest,
   CheckDeliveryResponse,
@@ -143,7 +144,7 @@ export class OzonOAuthClient {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error("❌ OAuth Error:", response.status, errorData);
+        logger.error("❌ OAuth Error:", response.status, errorData);
         throw new Error(
           `OAuth Error: ${response.status} ${response.statusText}`,
         );
@@ -153,7 +154,7 @@ export class OzonOAuthClient {
         OzonOAuthEndpointMap["oauth_token"]["response"]
       >;
     } catch (error) {
-      console.error("❌ Error in OAuth call:", error);
+      logger.error("❌ Error in OAuth call:", error);
       throw error;
     }
   }

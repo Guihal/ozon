@@ -2,6 +2,7 @@ import { queuedOzonRequest } from "../../utils/requestQueue";
 import { geocodeAddress } from "../../utils/geocode";
 import { sendOrderErrorEmail } from "../../utils/mailer";
 import { db } from "../../db";
+import * as logger from "../../utils/logger";
 import type {
   TildaWebhookBody,
   OzonOrderCreateRequest,
@@ -46,7 +47,7 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
   } | null;
 
   if (existingOrder) {
-    console.warn(
+    logger.warn(
       `⚠️ Дубль webhook: заказ ${tildaOrderId} уже существует (status: ${existingOrder.status})`,
     );
     if (existingOrder.ozon_order_number) {
@@ -127,7 +128,7 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
       items,
       courierCoords,
     );
-    console.log(`🔄 Checkout для заказа ${tildaOrderId}...`);
+    logger.log(`🔄 Checkout для заказа ${tildaOrderId}...`);
 
     const checkoutResult = await queuedOzonRequest(
       "/v2/delivery/checkout",
@@ -151,13 +152,13 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
         split.unavailable_reason &&
         split.unavailable_reason !== "UNSPECIFIED"
       ) {
-        console.warn(`⚠️ Split недоступен: ${split.unavailable_reason}`);
+        logger.warn(`⚠️ Split недоступен: ${split.unavailable_reason}`);
         continue;
       }
 
       const timeslot = split.delivery_method?.timeslots?.[0];
       if (!timeslot) {
-        console.warn("⚠️ Нет доступного timeslot в split");
+        logger.warn("⚠️ Нет доступного timeslot в split");
         continue;
       }
 
@@ -231,7 +232,7 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
       splits,
     };
 
-    console.log(`🔄 Создание заказа ${tildaOrderId} в Ozon...`);
+    logger.log(`🔄 Создание заказа ${tildaOrderId} в Ozon...`);
 
     const orderResult = await queuedOzonRequest(
       "/v2/order/create",
@@ -261,8 +262,8 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
       tildaOrderId,
     );
 
-    console.log(`✅ Заказ создан: ${orderData.order_number}`);
-    console.log(`   Postings: ${orderData.postings.join(", ")}`);
+    logger.log(`✅ Заказ создан: ${orderData.order_number}`);
+    logger.log(`   Postings: ${orderData.postings.join(", ")}`);
 
     return {
       success: true,
@@ -273,7 +274,10 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     const errorMsg =
       error instanceof Error ? error.message : JSON.stringify(error);
 
-    console.error(`❌ Ошибка создания заказа ${tildaOrderId}:`, errorMsg);
+    logger.critical(
+      `Ошибка создания заказа ${tildaOrderId}`,
+      errorMsg,
+    );
 
     // Обновляем статус в БД
     db.query(
@@ -367,7 +371,7 @@ function resolveItems(
         offer_id: mapping.ozon_offer_id,
       });
     } else {
-      console.warn(
+      logger.warn(
         `⚠️ Нет маппинга для товара: ${product.externalid} (${product.name}), SKU: ${product.sku}`,
       );
     }
@@ -448,6 +452,6 @@ async function handleOrderError(
       webhookBody: webhook,
     });
   } catch (emailError) {
-    console.error("❌ Не удалось отправить email об ошибке:", emailError);
+    logger.error("❌ Не удалось отправить email об ошибке:", emailError);
   }
 }

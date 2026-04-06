@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
+import * as logger from "../utils/logger";
 
 // Путь к файлу базы данных
 const DB_DIR = join(__dirname, "..", "cache");
@@ -100,7 +101,7 @@ function initDatabase(): Database {
     END
   `);
 
-  console.log("✅ SQLite база данных инициализирована:", DB_FILE);
+  logger.log("✅ SQLite база данных инициализирована:", DB_FILE);
 
   // Таблица маппинга SKU: Tilda externalid → Ozon sku + offer_id
   db.run(`

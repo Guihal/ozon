@@ -1,3 +1,4 @@
+import cron, { type ScheduledTask } from "node-cron";
 import {
   getPickupPointsList,
   getPickupPointsInfo,
@@ -14,8 +15,8 @@ import type {
 const UPDATE_HOUR = 14; // Обновление в 14:00
 const BATCH_SIZE = 100; // Размер пачки для запросов
 
-// Таймер для ежедневного обновления
-let dailyUpdateTimer: NodeJS.Timeout | null = null;
+// Задача cron для ежедневного обновления
+let cronTask: ScheduledTask | null = null;
 
 // Подготавливаем запросы один раз
 const insertStmt = db.prepare(`
@@ -477,35 +478,18 @@ export async function refreshPickupPointsCache(): Promise<void> {
  * Планирует ежедневное обновление кэша
  */
 function scheduleDailyUpdate(): void {
-  if (dailyUpdateTimer) {
-    clearTimeout(dailyUpdateTimer);
-    dailyUpdateTimer = null;
+  if (cronTask) {
+    cronTask.stop();
+    cronTask = null;
   }
 
-  const now = new Date();
-  const nextUpdate = new Date();
-  nextUpdate.setHours(UPDATE_HOUR, 0, 0, 0);
+  cronTask = cron.schedule(`0 ${UPDATE_HOUR} * * *`, () => {
+    refreshPickupPointsCache().catch((error) => {
+      console.error("❌ Ошибка ежедневного обновления кэша:", error);
+    });
+  });
 
-  if (now >= nextUpdate) {
-    nextUpdate.setDate(nextUpdate.getDate() + 1);
-  }
-
-  const timeUntilUpdate = nextUpdate.getTime() - now.getTime();
-  const hoursUntilUpdate = Math.floor(timeUntilUpdate / (1000 * 60 * 60));
-  const minutesUntilUpdate = Math.floor(
-    (timeUntilUpdate % (1000 * 60 * 60)) / (1000 * 60),
-  );
-
-  console.log(
-    `⏰ Следующее обновление: ${nextUpdate.toLocaleString("ru-RU")} (через ${hoursUntilUpdate}ч ${minutesUntilUpdate}мин)`,
-  );
-
-  dailyUpdateTimer = setTimeout(async () => {
-    await refreshPickupPointsCache();
-    scheduleDailyUpdate();
-  }, timeUntilUpdate);
-
-  dailyUpdateTimer.unref();
+  console.log(`⏰ Ежедневное обновление кэша ПВЗ запланировано на ${UPDATE_HOUR}:00`);
 }
 
 /**
@@ -529,9 +513,9 @@ export function getCacheStatus(): {
  * Останавливает автоматическое обновление
  */
 export function stopDailyUpdate(): void {
-  if (dailyUpdateTimer) {
-    clearTimeout(dailyUpdateTimer);
-    dailyUpdateTimer = null;
+  if (cronTask) {
+    cronTask.stop();
+    cronTask = null;
     console.log("⏹️ Автоматическое обновление кэша остановлено");
   }
 }

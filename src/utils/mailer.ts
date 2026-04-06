@@ -183,6 +183,79 @@ export async function sendOrderErrorEmail(
   }
 }
 
+export interface CriticalErrorEmailData {
+  subject: string;
+  message: string;
+  details?: unknown;
+}
+
+// Дебаунс для критических ошибок — не чаще раза в 10 минут
+let lastCriticalSentAt = 0;
+const CRITICAL_DEBOUNCE_MS = 10 * 60 * 1000;
+
+/**
+ * Отправляет уведомление о критической ошибке системы.
+ * Дебаунсится — не чаще раза в 10 минут.
+ */
+export async function sendCriticalErrorEmail(
+  data: CriticalErrorEmailData,
+): Promise<void> {
+  const now = Date.now();
+  if (now - lastCriticalSentAt < CRITICAL_DEBOUNCE_MS) {
+    return;
+  }
+  lastCriticalSentAt = now;
+
+  const subject = `🔴 Критическая ошибка: ${data.subject}`;
+  const detailsBlock =
+    data.details !== undefined
+      ? `<h3>Детали</h3>
+    <pre style="background:#f5f5f5;padding:12px;border-radius:4px;overflow-x:auto;font-size:12px;">${escapeHtml(
+      typeof data.details === "string"
+        ? data.details
+        : JSON.stringify(data.details, null, 2),
+    )}</pre>`
+      : "";
+
+  const html = `
+    <h2 style="color:#d32f2f;">🔴 Критическая ошибка системы</h2>
+    <p><strong>Тема:</strong> ${escapeHtml(data.subject)}</p>
+    <p><strong>Сообщение:</strong></p>
+    <pre style="background:#fff3f3;border:1px solid #f44336;padding:12px;border-radius:4px;">${escapeHtml(data.message)}</pre>
+    ${detailsBlock}
+    <p style="color:#888;font-size:12px;">Время: ${new Date().toISOString()}</p>
+  `;
+
+  const to = ozonConfig.notifyEmail;
+
+  if (!to) {
+    console.warn(
+      "⚠️  NOTIFY_EMAIL не задан — критическое письмо не отправлено",
+    );
+    console.warn(`   Тема: ${subject}`);
+    return;
+  }
+
+  const transport = createTransport();
+  if (!transport) {
+    console.warn("⚠️  SMTP не настроен — критическое письмо не отправлено");
+    console.warn(`   Тема: ${subject}`);
+    return;
+  }
+
+  try {
+    await transport.sendMail({
+      from: ozonConfig.smtpFrom,
+      to,
+      subject,
+      html,
+    });
+    console.log(`✅ Критическое письмо отправлено на ${to}`);
+  } catch (error) {
+    console.error("❌ Ошибка отправки критического письма:", error);
+  }
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")

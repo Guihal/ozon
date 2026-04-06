@@ -1,7 +1,15 @@
 /**
  * Система логирования с временными метками
- * Формат: [HH:MM:SS] [сообщение]
+ * Формат: [HH:MM:SS] [уровень] сообщение
+ *
+ * Уровни:
+ *  log/info  — информационные сообщения
+ *  warn      — предупреждения
+ *  error     — ошибки
+ *  critical  — критические ошибки: логируются + отправляется email-уведомление
  */
+
+import { sendCriticalErrorEmail } from "./mailer";
 
 /**
  * Получить текущее время в формате HH:MM:SS
@@ -14,44 +22,46 @@ function getTimestamp(): string {
   return `${hours}:${minutes}:${seconds}`;
 }
 
-/**
- * Логирование информационных сообщений
- * @param message - Сообщение для логирования
- * @param args - Дополнительные аргументы
- */
 export function log(message: string, ...args: unknown[]): void {
   const timestamp = getTimestamp();
   console.log(`[${timestamp}] ${message}`, ...args);
 }
 
-/**
- * Логирование ошибок
- * @param message - Сообщение об ошибке
- * @param args - Дополнительные аргументы
- */
 export function error(message: string, ...args: unknown[]): void {
   const timestamp = getTimestamp();
   console.error(`[${timestamp}] ${message}`, ...args);
 }
 
-/**
- * Логирование предупреждений
- * @param message - Сообщение предупреждения
- * @param args - Дополнительные аргументы
- */
 export function warn(message: string, ...args: unknown[]): void {
   const timestamp = getTimestamp();
   console.warn(`[${timestamp}] ${message}`, ...args);
 }
 
-/**
- * Логирование информационных сообщений (alias для log)
- * @param message - Информационное сообщение
- * @param args - Дополнительные аргументы
- */
 export function info(message: string, ...args: unknown[]): void {
   const timestamp = getTimestamp();
   console.info(`[${timestamp}] ${message}`, ...args);
+}
+
+/**
+ * Критическая ошибка — логируется в stderr и отправляется email.
+ * @param subject - краткая тема (до 80 символов)
+ * @param message - подробное сообщение / текст ошибки
+ * @param details - любые дополнительные данные (объект, строка и т.д.)
+ */
+export function critical(
+  subject: string,
+  message: string,
+  details?: unknown,
+): void {
+  const timestamp = getTimestamp();
+  console.error(
+    `[${timestamp}] 🔴 CRITICAL: ${subject} — ${message}`,
+    details ?? "",
+  );
+
+  sendCriticalErrorEmail({ subject, message, details }).catch((err) => {
+    console.error(`[${timestamp}] Не удалось отправить critical email:`, err);
+  });
 }
 
 export default {
@@ -59,4 +69,5 @@ export default {
   error,
   warn,
   info,
+  critical,
 };

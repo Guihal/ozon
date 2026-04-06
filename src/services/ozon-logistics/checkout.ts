@@ -1,4 +1,5 @@
 import { queuedOzonRequest } from "../../utils/requestQueue";
+import * as logger from "../../utils/logger";
 
 export interface DeliveryPriceRequest {
   mapPointId: number;
@@ -29,8 +30,8 @@ export async function getDeliveryPrice(
   req: DeliveryPriceRequest,
 ): Promise<DeliveryPriceResult> {
   try {
-    console.log(`🔄 Получение цены доставки для точки ${req.mapPointId}...`);
-    console.log(`   Items from request:`, JSON.stringify(req.items));
+    logger.log(`🔄 Получение цены доставки для точки ${req.mapPointId}...`);
+    logger.log(`   Items from request:`, JSON.stringify(req.items));
 
     // /v2/delivery/checkout — проверяем доступность и получаем цену
 
@@ -70,7 +71,7 @@ export async function getDeliveryPrice(
       },
       items,
     };
-    console.log(`   Ozon checkout body:`, JSON.stringify(checkoutBody));
+    logger.log(`   Ozon checkout body:`, JSON.stringify(checkoutBody));
 
     const result = await queuedOzonRequest(
       "/v2/delivery/checkout",
@@ -90,7 +91,7 @@ export async function getDeliveryPrice(
     );
 
     if (!split) {
-      console.error("❌ Доставка недоступна для этой точки");
+      logger.error("❌ Доставка недоступна для этой точки");
       throw new Error("Доставка недоступна для этой точки");
     }
 
@@ -107,12 +108,12 @@ export async function getDeliveryPrice(
         : 0,
     };
 
-    console.log(
+    logger.log(
       `✅ Цена доставки получена: ${priceResult.daysMin}-${priceResult.daysMax} дней`,
     );
     return priceResult;
   } catch (error) {
-    console.error("❌ Ошибка при получении цены доставки:", error);
+    logger.error("❌ Ошибка при получении цены доставки:", error);
     throw error;
   }
 }
@@ -175,14 +176,14 @@ export async function getCourierDeliveryPrice(
   req: CourierDeliveryPriceRequest,
 ): Promise<DeliveryPriceResult> {
   try {
-    console.log(
+    logger.log(
       `🔄 Получение цены курьерской доставки (${req.latitude}, ${req.longitude})...`,
     );
 
     const items = buildCheckoutItems(req.items);
 
     if (items.length === 0) {
-      console.warn(
+      logger.warn(
         "⚠️ Нет товаров с валидным SKU или offer_id — возвращаем дефолтную цену",
       );
       return { price: 0, currency: "RUB", daysMin: 3, daysMax: 7 };
@@ -200,7 +201,7 @@ export async function getCourierDeliveryPrice(
       },
       items,
     };
-    console.log(`   Ozon courier checkout body:`, JSON.stringify(checkoutBody));
+    logger.log(`   Ozon courier checkout body:`, JSON.stringify(checkoutBody));
 
     const result = await queuedOzonRequest(
       "/v2/delivery/checkout",
@@ -213,12 +214,12 @@ export async function getCourierDeliveryPrice(
     }
 
     const priceResult = extractDeliveryResult(result.data);
-    console.log(
+    logger.log(
       `✅ Курьерская доставка: ${priceResult.daysMin}-${priceResult.daysMax} дней`,
     );
     return priceResult;
   } catch (error) {
-    console.error("❌ Ошибка при получении цены курьерской доставки:", error);
+    logger.error("❌ Ошибка при получении цены курьерской доставки:", error);
     throw error;
   }
 }

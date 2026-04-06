@@ -1,6 +1,7 @@
 import { getAccessToken } from "../../utils/getAccessToken";
 import { ozonConfig } from "../../config/env";
 import { OzonApiClient } from "../../utils/typedApiClient";
+import * as logger from "../../utils/logger";
 import type {
   CheckDeliveryResponse,
   PickupPointsListResponse,
@@ -20,18 +21,18 @@ export async function checkDeliveryAvailability(
   // Валидация номера телефона
   const phoneRegex = /^7\d{10}$/;
   if (!phoneRegex.test(clientPhone)) {
-    console.error("❌ Неверный формат номера телефона:", clientPhone);
+    logger.error("❌ Неверный формат номера телефона:", clientPhone);
     throw new Error("Номер телефона должен быть в формате 7XXXXXXXXXX");
   }
 
   const token = getAccessToken();
   if (!token) {
-    console.error("❌ Токен авторизации не найден");
+    logger.error("❌ Токен авторизации не найден");
     throw new Error("Требуется авторизация");
   }
 
   try {
-    console.log(
+    logger.log(
       `🔄 Проверка доступности доставки для телефона: ${clientPhone}`,
     );
 
@@ -44,10 +45,10 @@ export async function checkDeliveryAvailability(
       client_phone: clientPhone,
     });
 
-    console.log(`✅ Результат проверки: is_possible=${data.is_possible}`);
+    logger.log(`✅ Результат проверки: is_possible=${data.is_possible}`);
     return data;
   } catch (error) {
-    console.error("❌ Ошибка при проверке доставки:", error);
+    logger.error("❌ Ошибка при проверке доставки:", error);
     throw error;
   }
 }
@@ -59,12 +60,12 @@ export async function checkDeliveryAvailability(
 export async function getPickupPointsList(): Promise<PickupPointsListResponse> {
   const token = getAccessToken();
   if (!token) {
-    console.error("❌ Токен авторизации не найден");
+    logger.error("❌ Токен авторизации не найден");
     throw new Error("Требуется авторизация");
   }
 
   try {
-    console.log("🔄 Получение списка точек самовывоза...");
+    logger.log("🔄 Получение списка точек самовывоза...");
 
     const client = new OzonApiClient(
       ozonConfig.apiUrl,
@@ -73,10 +74,10 @@ export async function getPickupPointsList(): Promise<PickupPointsListResponse> {
     );
     const data = await client.call("/v1/delivery/point/list", {});
 
-    console.log(`✅ Получено точек самовывоза: ${data.points.length}`);
+    logger.log(`✅ Получено точек самовывоза: ${data.points.length}`);
     return data;
   } catch (error) {
-    console.error("❌ Ошибка при получении точек самовывоза:", error);
+    logger.error("❌ Ошибка при получении точек самовывоза:", error);
     throw error;
   }
 }
@@ -94,18 +95,18 @@ export async function getPickupPointsInfo(
   }
 
   if (mapPointIds.length > 100) {
-    console.error("❌ Превышен лимит идентификаторов:", mapPointIds.length);
+    logger.error("❌ Превышен лимит идентификаторов:", mapPointIds.length);
     throw new Error("Максимум 100 идентификаторов за запрос");
   }
 
   const token = getAccessToken();
   if (!token) {
-    console.error("❌ Токен авторизации не найден");
+    logger.error("❌ Токен авторизации не найден");
     throw new Error("Требуется авторизация");
   }
 
   try {
-    console.log(
+    logger.log(
       `🔄 Получение информации о ${mapPointIds.length} точках самовывоза...`,
     );
 
@@ -118,10 +119,10 @@ export async function getPickupPointsInfo(
       map_point_ids: mapPointIds,
     });
 
-    console.log(`✅ Получена информация о ${data.points.length} точках`);
+    logger.log(`✅ Получена информация о ${data.points.length} точках`);
     return data;
   } catch (error) {
-    console.error("❌ Ошибка при получении информации о точках:", error);
+    logger.error("❌ Ошибка при получении информации о точках:", error);
     throw error;
   }
 }
@@ -136,7 +137,7 @@ export async function getDeliveryMapClusters(
 ): Promise<DeliveryMapResponse> {
   const token = getAccessToken();
   if (!token) {
-    console.error("❌ Токен авторизации не найден");
+    logger.error("❌ Токен авторизации не найден");
     throw new Error("Требуется авторизация");
   }
 
@@ -148,10 +149,10 @@ export async function getDeliveryMapClusters(
     );
     const data = await client.call("/v1/delivery/map", { viewport, zoom });
 
-    console.log(`✅ Ozon /v1/delivery/map: ${data.clusters.length} кластеров`);
+    logger.log(`✅ Ozon /v1/delivery/map: ${data.clusters.length} кластеров`);
     return data;
   } catch (error) {
-    console.error("❌ Ошибка при запросе Ozon /v1/delivery/map:", error);
+    logger.error("❌ Ошибка при запросе Ozon /v1/delivery/map:", error);
     throw error;
   }
 }

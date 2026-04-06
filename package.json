@@ -9,10 +9,15 @@
   },
   "dependencies": {
     "@elysiajs/cors": "latest",
+    "bottleneck": "^2.19.5",
     "elysia": "latest",
-    "nodemailer": "^8.0.4"
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.4",
+    "ofetch": "^1.5.1",
+    "p-queue": "^9.1.1"
   },
   "devDependencies": {
+    "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^8.0.0",
     "bun-types": "latest"
   },

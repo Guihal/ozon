@@ -4,6 +4,8 @@
  * Ограничения: 1 запрос/сек, обязательный User-Agent
  */
 
+import * as logger from "./logger";
+
 export interface GeocoderResult {
   lat: number;
   lon: number;
@@ -33,13 +35,13 @@ export async function geocodeAddress(
     });
 
     if (!res.ok) {
-      console.error(`❌ Geocode HTTP error: ${res.status}`);
+      logger.error(`❌ Geocode HTTP error: ${res.status}`);
       return null;
     }
 
     const data = await res.json();
     if (!Array.isArray(data) || data.length === 0) {
-      console.warn(`⚠️ Геокодирование: адрес не найден — "${address}"`);
+      logger.warn(`⚠️ Геокодирование: адрес не найден — "${address}"`);
       return null;
     }
 
@@ -48,7 +50,7 @@ export async function geocodeAddress(
       lon: parseFloat(data[0].lon),
     };
   } catch (error) {
-    console.error("❌ Ошибка геокодирования:", error);
+    logger.error("❌ Ошибка геокодирования:", error);
     return null;
   }
 }

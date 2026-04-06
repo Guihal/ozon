@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
+import PQueue from "p-queue";
 import { sendAuthRequiredEmail } from "./mailer";
 import {
   getAccessToken,
@@ -8,6 +9,7 @@ import {
 } from "./getAccessToken";
 import { ozonConfig } from "../config/env";
 import { rateLimitedFetch } from "./rateLimiter";
+import * as logger from "./logger";
 
 /**
  * Очередь запросов к Ozon API.
@@ -36,7 +38,7 @@ function loadQueue(): void {
     if (existsSync(QUEUE_FILE)) {
       queue = JSON.parse(readFileSync(QUEUE_FILE, "utf-8"));
       if (queue.length > 0) {
-        console.log(`📋 Загружена очередь: ${queue.length} запрос(ов)`);
+        logger.log(`📋 Загружена очередь: ${queue.length} запрос(ов)`);
       }
     }
   } catch {
@@ -48,7 +50,7 @@ function saveQueue(): void {
   try {
     writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2), "utf-8");
   } catch (error) {
-    console.error("❌ Не удалось сохранить очередь:", error);
+    logger.error("❌ Не удалось сохранить очередь:", error);
   }
 }
 
@@ -58,13 +60,13 @@ function saveQueue(): void {
 function enqueue(endpoint: string, method: string, body: unknown): void {
   queue.push({ endpoint, method, body, timestamp: Date.now() });
   saveQueue();
-  console.log(
+  logger.log(
     `📋 Запрос поставлен в очередь: ${method} ${endpoint} (всего: ${queue.length})`,
   );
 
   // Отправляем email (дебаунсится внутри)
   sendAuthRequiredEmail(queue.length).catch((err) => {
-    console.error("❌ Ошибка при отправке email:", err);
+    logger.error("❌ Ошибка при отправке email:", err);
   });
 }
 
@@ -139,7 +141,7 @@ export async function queuedOzonRequest(
   const refreshToken = getRefreshToken();
   if (refreshToken) {
     try {
-      console.log("🔄 Токен истёк, обновляем...");
+      logger.log("🔄 Токен истёк, обновляем...");
       const newTokenData = await fetchAccessToken(
         "refresh_token",
         undefined,
@@ -157,7 +159,11 @@ export async function queuedOzonRequest(
       }
       return { data: retryResult.data, queued: false };
     } catch (refreshError) {
-      console.error("❌ Refresh token тоже не сработал:", refreshError);
+      logger.critical(
+        "Refresh token не работает",
+        "Токен истёк и refresh не удался. Требуется повторная авторизация.",
+        refreshError,
+      );
     }
   }
 
@@ -185,11 +191,11 @@ export async function replayQueue(): Promise<{
 
   const token = getAccessToken();
   if (!token) {
-    console.error("❌ Нет токена для воспроизведения очереди");
+    logger.error("❌ Нет токена для воспроизведения очереди");
     return { total: queue.length, success: 0, failed: queue.length };
   }
 
-  console.log(`🔄 Воспроизведение очереди: ${queue.length} запрос(ов)...`);
+  logger.log(`🔄 Воспроизведение очереди: ${queue.length} запрос(ов)...`);
 
   const items = [...queue];
   queue = [];
@@ -198,30 +204,36 @@ export async function replayQueue(): Promise<{
   let success = 0;
   let failed = 0;
 
+  const pq = new PQueue({ concurrency: 3 });
+
   for (const item of items) {
-    try {
-      const result = await executeRequest(
-        item.endpoint,
-        item.method,
-        item.body,
-        token,
-      );
-      if (result.httpStatus < 400) {
-        success++;
-        console.log(`   ✅ ${item.method} ${item.endpoint}`);
-      } else {
-        failed++;
-        console.error(
-          `   ❌ ${item.method} ${item.endpoint}: ${result.httpStatus}`,
+    pq.add(async () => {
+      try {
+        const result = await executeRequest(
+          item.endpoint,
+          item.method,
+          item.body,
+          token,
         );
+        if (result.httpStatus < 400) {
+          success++;
+          logger.log(`   ✅ ${item.method} ${item.endpoint}`);
+        } else {
+          failed++;
+          logger.error(
+            `   ❌ ${item.method} ${item.endpoint}: ${result.httpStatus}`,
+          );
+        }
+      } catch (error) {
+        failed++;
+        logger.error(`   ❌ ${item.method} ${item.endpoint}:`, error);
       }
-    } catch (error) {
-      failed++;
-      console.error(`   ❌ ${item.method} ${item.endpoint}:`, error);
-    }
+    });
   }
 
-  console.log(
+  await pq.onIdle();
+
+  logger.log(
     `📋 Очередь обработана: ${success} успешн., ${failed} ошибок из ${items.length}`,
   );
   return { total: items.length, success, failed };

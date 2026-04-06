@@ -144,6 +144,6 @@ if (ozonConfig.isConfigured) {
   console.log(`   API URL: ${ozonConfig.apiUrl}`);
   console.log(`   Redirect URI: ${ozonConfig.redirectUri}`);
   console.log(`   Production: ${ozonConfig.isProd}`);
-  console.log("");
-  console.log("⚠️  ВАКонфигурация Ozon не завершена");
+} else {
+  console.log("⚠️  Конфигурация Ozon не завершена");
 }

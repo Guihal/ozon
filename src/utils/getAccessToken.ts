@@ -3,6 +3,7 @@ import { join } from "path";
 import { ozonConfig } from "../config/env";
 import { OzonOAuthClient } from "./typedApiClient";
 import { ozonOAuthFetch } from "./ozonFetch";
+import * as logger from "./logger";
 
 export interface TokenData {
   access_token: string;
@@ -14,7 +15,7 @@ export interface TokenData {
 
 // Проверка конфигурации
 if (!ozonConfig.isConfigured) {
-  console.warn("⚠️  OAuth не настроен. Проверьте переменные окружения.");
+  logger.warn("⚠️  OAuth не настроен. Проверьте переменные окружения.");
 }
 
 // Путь к файлу для сохранения токена
@@ -57,11 +58,11 @@ function loadTokenFromFile(): void {
       tokenCache.expires = data.expires || Date.now();
     }
   } catch (error) {
-    console.warn("Не удалось загрузить токен из файла:", error);
+    logger.warn("Не удалось загрузить токен из файла:", error);
   }
 }
 
-console.log(ozonConfig.clientId);
+logger.log(`Client ID: ${ozonConfig.clientId}`);
 
 /**
  * Сохранение токена в файл
@@ -78,7 +79,7 @@ function saveTokenToFile(): void {
       "utf-8",
     );
   } catch (error) {
-    console.warn("Не удалось сохранить токен в файл:", error);
+    logger.warn("Не удалось сохранить токен в файл:", error);
   }
 }
 
@@ -134,13 +135,13 @@ export function validateState(state: string): boolean {
   const timestamp = stateCache.get(state);
 
   if (!timestamp) {
-    console.error("❌ State не найден или истёк");
+    logger.error("❌ State не найден или истёк");
     return false;
   }
 
   // Проверяем, не истёк ли state
   if (Date.now() > timestamp) {
-    console.error("❌ State истёк");
+    logger.error("❌ State истёк");
     stateCache.delete(state);
     return false;
   }
@@ -199,7 +200,7 @@ export async function fetchAccessToken(
 
   saveTokenToFile();
 
-  console.log(
+  logger.log(
     `Токен получен. Истекает через ${data.expires_in - Date.now() / 1000} секунд.`,
   );
 
@@ -257,10 +258,10 @@ export function resetToken(): void {
       unlinkSync(TOKEN_FILE);
     }
   } catch (error) {
-    console.warn("Не удалось удалить файл токена:", error);
+    logger.warn("Не удалось удалить файл токена:", error);
   }
 
-  console.log("Токен сброшен");
+  logger.log("Токен сброшен");
 }
 
 /**
