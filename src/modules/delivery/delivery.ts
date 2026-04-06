@@ -31,7 +31,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
   // Endpoint для приёма callback'а от Tilda после оплаты (success)
   .post(
     "/delivery/tilda/success",
-    async ({ body, raw }) => {
+    async ({ body }) => {
       try {
         console.log("🔔 Получен callback от Tilda /delivery/tilda/success");
         console.log(JSON.stringify(body));
@@ -48,6 +48,57 @@ export const delivery = new Elysia({ prefix: "/v1" })
         return { success: true };
       } catch (error) {
         console.error("❌ Ошибка в /delivery/tilda/success:", error);
+        throw error;
+      }
+    },
+    { body: t.Any() },
+  )
+  // Endpoint для создания заказа — пока логируем входящий запрос целиком
+  .post(
+    "/order/create",
+    async ({ body, request, headers }) => {
+      try {
+        const sourceIp =
+          headers["x-forwarded-for"] ||
+          headers["x-real-ip"] ||
+          request.headers.get("x-forwarded-for") ||
+          request.headers.get("x-real-ip") ||
+          "unknown";
+        const origin = headers["origin"] || request.headers.get("origin") || "";
+        const referer =
+          headers["referer"] || request.headers.get("referer") || "";
+        const userAgent =
+          headers["user-agent"] || request.headers.get("user-agent") || "";
+
+        console.log("🛒 Получен запрос на создание заказа /order/create");
+        console.log(`   Source IP: ${sourceIp}`);
+        console.log(`   Origin: ${origin}`);
+        console.log(`   Referer: ${referer}`);
+        console.log(`   Body: ${JSON.stringify(body)}`);
+
+        const LOG_DIR = join(__dirname, "..", "..", "cache");
+        if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
+        const file = join(LOG_DIR, "order-create.log");
+        const entry = JSON.stringify({
+          received_at: new Date().toISOString(),
+          source_ip: sourceIp,
+          origin,
+          referer,
+          user_agent: userAgent,
+          headers: Object.fromEntries(
+            [...request.headers.entries()].filter(
+              ([k]) =>
+                !k.toLowerCase().includes("authorization") &&
+                !k.toLowerCase().includes("cookie"),
+            ),
+          ),
+          body,
+        });
+        appendFileSync(file, entry + "\n", "utf-8");
+
+        return { success: true, message: "Заказ принят в обработку" };
+      } catch (error) {
+        console.error("❌ Ошибка в /order/create:", error);
         throw error;
       }
     },

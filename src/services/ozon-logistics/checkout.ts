@@ -48,7 +48,15 @@ export async function getDeliveryPrice(
       .filter((item) => item.sku || item.offer_id);
 
     if (items.length === 0) {
-      throw new Error("Нет товаров с валидным SKU или offer_id");
+      console.warn(
+        "⚠️ Нет товаров с валидным SKU или offer_id — возвращаем дефолтную цену",
+      );
+      return {
+        price: 0,
+        currency: "RUB",
+        daysMin: 3,
+        daysMax: 7,
+      };
     }
 
     const response = await fetch(`${ozonConfig.apiUrl}/v2/delivery/checkout`, {

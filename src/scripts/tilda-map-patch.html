@@ -30,16 +30,28 @@
           ?.value.replace(/\D/g, "") || "";
       if (window.tcart__preloader) window.tcart__preloader.show();
       try {
+        // Логируем содержимое корзины для отладки
+        console.log(
+          "[OzonPatch] Cart products:",
+          JSON.stringify(window.tcart.products),
+        );
+
         const res = await fetch(`${BACKEND}/v1/delivery/price`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mapPointId: parseInt(mapPointId),
-            items: (window.tcart.products || []).map((p) => ({
-              sku: parseInt(p.sku) || 0,
-              quantity: parseInt(p.quantity),
-              offer_id: p.externalid || String(p.lid),
-            })),
+            items: (window.tcart.products || [])
+              .map((p) => {
+                const ozonSku = parseInt(p.sku);
+                const ozonOfferId = (p.sku && String(p.sku).trim()) || "";
+                return {
+                  sku: ozonSku > 0 ? ozonSku : 0,
+                  quantity: parseInt(p.quantity) || 1,
+                  offer_id: ozonOfferId,
+                };
+              })
+              .filter((p) => p.sku > 0 || p.offer_id !== ""),
             buyerPhone: phone,
           }),
         });
