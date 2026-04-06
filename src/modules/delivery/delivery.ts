@@ -228,9 +228,9 @@ export const delivery = new Elysia({ prefix: "/v1" })
         mapPointId: t.Number(),
         items: t.Array(
           t.Object({
-            sku: t.Number(),
+            sku: t.Optional(t.Number()),
             quantity: t.Number(),
-            offer_id: t.String(),
+            offer_id: t.Optional(t.String()),
           }),
         ),
         buyerPhone: t.Optional(t.String()),
@@ -261,8 +261,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
         set.status = 500;
         return {
           success: false,
-          error:
-            error instanceof Error ? error.message : "Доставка недоступна",
+          error: error instanceof Error ? error.message : "Доставка недоступна",
         };
       }
     },

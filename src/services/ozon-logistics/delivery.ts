@@ -32,9 +32,7 @@ export async function checkDeliveryAvailability(
   }
 
   try {
-    logger.log(
-      `🔄 Проверка доступности доставки для телефона: ${clientPhone}`,
-    );
+    logger.log(`🔄 Проверка доступности доставки для телефона: ${clientPhone}`);
 
     const client = new OzonApiClient(
       ozonConfig.apiUrl,

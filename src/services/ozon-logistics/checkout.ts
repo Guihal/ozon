@@ -35,18 +35,15 @@ export async function getDeliveryPrice(
 
     // /v2/delivery/checkout — проверяем доступность и получаем цену
 
-    // Формируем items: Ozon требует хотя бы одно из sku (>0) или offer_id (непустая строка)
+    // Формируем items: Tilda sku = Ozon offer_id (артикул продавца)
     const items = req.items
       .map((item) => {
         const obj: Record<string, any> = { quantity: item.quantity };
-        // Ozon принимает sku (число) ИЛИ offer_id (строка-артикул)
-        // SKU из Тильды — числовой Ozon SKU, передаём как sku
-        if (item.sku && item.sku > 0) {
-          obj.sku = item.sku;
-        }
-        // offer_id — артикул продавца (может совпадать с SKU, может отличаться)
         if (item.offer_id && item.offer_id.trim() !== "") {
           obj.offer_id = item.offer_id;
+        }
+        if (item.sku && item.sku > 0) {
+          obj.sku = item.sku;
         }
         return obj;
       })
@@ -135,7 +132,8 @@ function buildCheckoutItems(
     .map((item) => {
       const obj: Record<string, any> = { quantity: item.quantity };
       if (item.sku && item.sku > 0) obj.sku = item.sku;
-      if (item.offer_id && item.offer_id.trim() !== "") obj.offer_id = item.offer_id;
+      if (item.offer_id && item.offer_id.trim() !== "")
+        obj.offer_id = item.offer_id;
       return obj;
     })
     .filter((item) => item.sku || item.offer_id);
