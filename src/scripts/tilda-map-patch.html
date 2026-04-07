@@ -699,6 +699,25 @@
         // Блокируем кнопку при инициализации
         updatePurchaseButton();
 
+        // Проверяем предзаполненный телефон из ЛК Тильды
+        setTimeout(() => {
+          const phoneMaskInput = document.querySelector(
+            ".t706 .js-phonemask-result",
+          );
+          const phoneInput = document.querySelector('.t706 [name="phone"]');
+          const prefilled =
+            (phoneMaskInput && phoneMaskInput.value) ||
+            (phoneInput && phoneInput.value) ||
+            "";
+          if (prefilled.replace(/\D/g, "").length >= 10) {
+            console.log(
+              "[OzonPatch] Предзаполненный телефон найден:",
+              prefilled,
+            );
+            handlePhoneChange();
+          }
+        }, 1000);
+
         console.log("[OzonPatch] V4 — ПВЗ + курьер + блокировка кнопки ✓");
 
         // ==============================================

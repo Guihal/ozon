@@ -73,10 +73,22 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
   const phone = normalizePhone(webhook.Phone);
 
   // Определяем тип доставки
-  const deliveryType = webhook.ozon_delivery_type || "pickup";
+  // Приоритет: payment.delivery (название службы) → ozon_delivery_type → fallback
+  const deliveryName = (payment.delivery || "").toLowerCase();
+  const isCourierByName =
+    deliveryName.includes("адрес") ||
+    deliveryName.includes("курьер") ||
+    deliveryName.includes("courier");
+  const deliveryType = isCourierByName
+    ? "courier"
+    : webhook.ozon_delivery_type || "pickup";
   const mapPointId = webhook.ozon_map_point_id
     ? parseInt(webhook.ozon_map_point_id, 10)
     : 0;
+
+  logger.log(
+    `📦 Определён тип доставки: ${deliveryType} (delivery: "${payment.delivery}", ozon_delivery_type: "${webhook.ozon_delivery_type}")`,
+  );
 
   // Резолвим товары (только sku, без resolveOfferIds — у Logistics-токена нет прав на /v3/product/info/list)
   const items = resolveItems(payment.products);
