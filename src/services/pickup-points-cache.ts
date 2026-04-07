@@ -119,9 +119,7 @@ async function fetchAllPointsInfo(points: PickupPointItem[]): Promise<void> {
   const batches = Math.ceil(totalPoints / BATCH_SIZE);
   let totalSaved = 0;
 
-  console.log(
-    `🔄 Получение детальной информации: ${totalPoints} точек, ${batches} пачек`,
-  );
+  console.log(`� Начат сбор точек самовывоза: ${totalPoints} точек...`);
 
   for (let i = 0; i < batches; i++) {
     const start = i * BATCH_SIZE;
@@ -152,7 +150,9 @@ async function fetchAllPointsInfo(points: PickupPointItem[]): Promise<void> {
     }
   }
 
-  console.log(`✅ Сохранено ${totalSaved} из ${totalPoints} точек в SQLite`);
+  console.log(
+    `✅ Сбор окончен: сохранено ${totalSaved} из ${totalPoints} точек`,
+  );
 }
 
 /**
