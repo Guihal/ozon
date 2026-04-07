@@ -199,47 +199,51 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
         },
         items: (split.items && split.items.length > 0
           ? split.items.map((i: any) => {
-              // Берём sku/offer_id из checkout ответа, фоллбэк на наши items
-              const matchedItem = items.find(
-                (it) =>
-                  (i.sku && it.sku === i.sku) ||
-                  (i.offer_id && it.offer_id === i.offer_id),
-              );
-              // Цена: из checkout → из webhook products → 0
+              const matchedItem = items.find((it) => i.sku && it.sku === i.sku);
+              // Цена: из checkout → из webhook products → 1 руб
               const webhookProduct = payment.products.find(
                 (p: any) => parseInt(p.sku, 10) === (i.sku || matchedItem?.sku),
               );
               const priceUnits =
                 i.price?.units ??
-                Math.floor(Number(webhookProduct?.price || 0));
+                Math.floor(Number(webhookProduct?.price || 1));
               const priceNanos = i.price?.nanos ?? 0;
-              return {
-                offer_id: i.offer_id || matchedItem?.offer_id || "",
+              const sku = i.sku || matchedItem?.sku || 0;
+              const result: Record<string, any> = {
                 price: {
                   currency_code: i.price?.currency_code || "RUB",
                   nanos: priceNanos,
                   units: priceUnits,
                 },
                 quantity: i.quantity || matchedItem?.quantity || 1,
-                sku: i.sku || matchedItem?.sku || 0,
+                sku,
               };
+              // offer_id только если это реальный артикул (не название товара)
+              const offerId = matchedItem?.offer_id || "";
+              if (offerId && !/\s/.test(offerId)) {
+                result.offer_id = offerId;
+              }
+              return result;
             })
           : items.map((i) => {
               const webhookProduct = payment.products.find(
                 (p: any) => parseInt(p.sku, 10) === i.sku,
               );
-              return {
-                offer_id: i.offer_id,
+              const result: Record<string, any> = {
                 price: {
                   currency_code: "RUB",
                   nanos: 0,
-                  units: Math.floor(Number(webhookProduct?.price || 0)),
+                  units: Math.floor(Number(webhookProduct?.price || 1)),
                 },
                 quantity: i.quantity,
                 sku: i.sku,
               };
+              if (i.offer_id && !/\s/.test(i.offer_id)) {
+                result.offer_id = i.offer_id;
+              }
+              return result;
             })
-        ).filter((i: any) => i.sku > 0 || (i.offer_id && i.offer_id !== "")),
+        ).filter((i: any) => i.sku > 0),
         warehouse_id: split.warehouse_id || 0,
       });
     }
