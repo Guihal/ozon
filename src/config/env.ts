@@ -4,6 +4,7 @@
  */
 
 import { networkInterfaces } from "os";
+import { join } from "path";
 
 /**
  * Get local IP address automatically
@@ -118,6 +119,9 @@ export const ozonConfig = {
 
   // Server port
   port: port,
+
+  // Database path (вне директории проекта, чтобы не терялась при деплое)
+  dbPath: process.env.DB_PATH || join(process.cwd(), "data", "ozon.db"),
 
   // Tilda webhook
   tildaWebhookApiKey: process.env.TILDA_WEBHOOK_API_KEY || "",

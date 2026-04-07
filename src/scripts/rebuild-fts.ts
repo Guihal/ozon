@@ -5,7 +5,8 @@
 import { Database } from "bun:sqlite";
 import { join } from "path";
 
-const DB_FILE = join(__dirname, "..", "cache", "ozon.db");
+const DB_FILE =
+  process.env.DB_PATH || join(__dirname, "..", "..", "data", "ozon.db");
 
 const db = new Database(DB_FILE, { strict: true });
 

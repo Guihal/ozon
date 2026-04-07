@@ -3,7 +3,6 @@ import { geocodeAddress } from "../../utils/geocode";
 import { sendOrderErrorEmail } from "../../utils/mailer";
 import { db } from "../../db";
 import * as logger from "../../utils/logger";
-import { resolveOfferIds } from "./product";
 import type {
   TildaWebhookBody,
   OzonOrderCreateRequest,
@@ -57,10 +56,14 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
         orderNumber: existingOrder.ozon_order_number,
       };
     }
-    // Если предыдущая попытка была с ошибкой — пробуем снова
+    // Если предыдущая попытка была с ошибкой — удаляем запись и пробуем снова
     if (existingOrder.status !== "error") {
       return { success: true, orderNumber: "processing" };
     }
+    logger.log(
+      `🔄 Повторная попытка для заказа ${tildaOrderId} (предыдущий статус: error)`,
+    );
+    db.query("DELETE FROM orders WHERE tilda_order_id = ?").run(tildaOrderId);
   }
 
   // Парсинг покупателя
@@ -75,8 +78,8 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     ? parseInt(webhook.ozon_map_point_id, 10)
     : 0;
 
-  // Резолвим товары
-  const items = await resolveItems(payment.products);
+  // Резолвим товары (только sku, без resolveOfferIds — у Logistics-токена нет прав на /v3/product/info/list)
+  const items = resolveItems(payment.products);
   if (items.length === 0) {
     const error = "Нет товаров с валидным SKU/offer_id для Ozon";
     await handleOrderError(
@@ -348,26 +351,21 @@ function normalizePhone(phone: string): string {
  * Сначала пробует SKU из webhook, затем таблицу sku_mapping.
  * Для товаров с SKU — резолвит offer_id через /v3/product/info/list.
  */
-async function resolveItems(
+function resolveItems(
   products: TildaWebhookBody["payment"]["products"],
-): Promise<{ sku: number; quantity: number; offer_id: string }[]> {
+): { sku: number; quantity: number; offer_id: string }[] {
   const items: { sku: number; quantity: number; offer_id: string }[] = [];
-  const skusToResolve: number[] = [];
-  const skuItemIndices: { index: number; sku: number }[] = [];
 
   for (const product of products) {
     // Пробуем SKU напрямую из webhook (Тильда передаёт Ozon SKU в поле sku)
     const directSku = parseInt(product.sku, 10);
 
     if (directSku > 0) {
-      const idx = items.length;
       items.push({
         sku: directSku,
         quantity: product.quantity,
-        offer_id: "", // будет заполнен после резолва
+        offer_id: "",
       });
-      skusToResolve.push(directSku);
-      skuItemIndices.push({ index: idx, sku: directSku });
       continue;
     }
 
@@ -388,21 +386,6 @@ async function resolveItems(
       logger.warn(
         `⚠️ Нет маппинга для товара: ${product.externalid} (${product.name}), SKU: ${product.sku}`,
       );
-    }
-  }
-
-  // Резолвим offer_id для товаров с SKU через Ozon API
-  if (skusToResolve.length > 0) {
-    const offerIdMap = await resolveOfferIds(skusToResolve);
-    for (const { index, sku } of skuItemIndices) {
-      const offerId = offerIdMap.get(sku);
-      if (offerId) {
-        items[index].offer_id = offerId;
-      } else {
-        logger.warn(
-          `⚠️ Не удалось получить offer_id для SKU ${sku} — оставляем пустым, отправим только sku`,
-        );
-      }
     }
   }
 

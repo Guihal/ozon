@@ -1,11 +1,12 @@
 import { Database } from "bun:sqlite";
-import { join } from "path";
+import { dirname } from "path";
 import { existsSync, mkdirSync } from "fs";
 import * as logger from "../utils/logger";
+import { ozonConfig } from "../config/env";
 
-// Путь к файлу базы данных
-const DB_DIR = join(__dirname, "..", "cache");
-const DB_FILE = join(DB_DIR, "ozon.db");
+// Путь к файлу базы данных (из переменной окружения или data/ozon.db)
+const DB_FILE = ozonConfig.dbPath;
+const DB_DIR = dirname(DB_FILE);
 
 /**
  * Инициализация базы данных
