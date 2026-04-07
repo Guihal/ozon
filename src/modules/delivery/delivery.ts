@@ -86,6 +86,20 @@ export const delivery = new Elysia({ prefix: "/v1" })
         console.log(`   Origin: ${origin}`);
         console.log(`   Referer: ${referer}`);
 
+        // Тестовый запрос от Тильды при проверке URL — нет данных заказа
+        if (
+          !body ||
+          typeof body !== "object" ||
+          !(body as any).payment ||
+          !(body as any).payment?.orderid
+        ) {
+          console.log(
+            "ℹ️  Тестовый запрос (нет payment.orderid) — отвечаем 200",
+          );
+          console.log("   Body:", JSON.stringify(body));
+          return { success: true, message: "Webhook endpoint is active" };
+        }
+
         // Логируем webhook
         const LOG_DIR = join(__dirname, "..", "..", "cache");
         if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
