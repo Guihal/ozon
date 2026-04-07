@@ -234,8 +234,7 @@
     }
 
     /**
-     * Геокодинг адреса через серверный endpoint
-     * Используем Nominatim через backend
+     * Геокодинг адреса через бэкенд (Яндекс Геокодер)
      */
     async function geocodeAndUpdateCourier(address) {
       if (!address || address.trim().length < 5) {
@@ -247,19 +246,15 @@
       ozonState.checkoutPassed = false;
       updatePurchaseButton();
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
-            q: address,
-            format: "json",
-            countrycodes: "ru",
-            limit: "1",
-          })}`,
-          { headers: { "User-Agent": "OzonLogisticsIntegration/1.0" } },
-        );
+        const res = await fetch(`${BACKEND}/v1/delivery/geocode`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address }),
+        });
         const data = await res.json();
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lon = parseFloat(data[0].lon);
+        if (data.success && data.lat && data.lon) {
+          const lat = data.lat;
+          const lon = data.lon;
           console.log(`[OzonPatch] Geocoded "${address}" → ${lat}, ${lon}`);
 
           // Сохраняем координаты и тип доставки

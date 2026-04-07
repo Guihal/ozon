@@ -8,6 +8,7 @@ import {
   getCourierDeliveryPrice,
 } from "../../services/ozon-logistics/checkout";
 import { createOzonOrder } from "../../services/ozon-logistics/order";
+import { geocodeAddress } from "../../utils/geocode";
 import {
   getTildaPickupPoints,
   getAllTildaPickupPoints,
@@ -200,6 +201,26 @@ export const delivery = new Elysia({ prefix: "/v1" })
       ...getCacheStatus(),
     };
   })
+  .post(
+    "/delivery/geocode",
+    async ({ body, set }) => {
+      try {
+        const result = await geocodeAddress(body.address);
+        if (!result) {
+          return { success: false, error: "Адрес не найден" };
+        }
+        return { success: true, lat: result.lat, lon: result.lon };
+      } catch (error) {
+        console.error("❌ Ошибка в endpoint /delivery/geocode:", error);
+        return { success: false, error: "Ошибка геокодирования" };
+      }
+    },
+    {
+      body: t.Object({
+        address: t.String({ minLength: 3 }),
+      }),
+    },
+  )
   .post(
     "/delivery/price",
     async ({ body, set }) => {
