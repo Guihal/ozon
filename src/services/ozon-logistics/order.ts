@@ -402,9 +402,8 @@ async function resolveItems(
         items[index].offer_id = offerId;
       } else {
         logger.warn(
-          `⚠️ Не удалось получить offer_id для SKU ${sku}, используем SKU как offer_id`,
+          `⚠️ Не удалось получить offer_id для SKU ${sku} — оставляем пустым, отправим только sku`,
         );
-        items[index].offer_id = String(sku);
       }
     }
   }

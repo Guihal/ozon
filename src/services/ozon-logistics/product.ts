@@ -57,6 +57,9 @@ export async function resolveOfferIds(
     }
 
     const data = response.data as ProductInfoListResponse;
+    logger.log(
+      `   product/info/list response: ${JSON.stringify(data).slice(0, 500)}`,
+    );
 
     if (data.items) {
       for (const item of data.items) {

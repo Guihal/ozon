@@ -52,12 +52,10 @@ export async function getDeliveryPrice(
         const obj: Record<string, any> = { quantity: item.quantity };
         if (item.sku && item.sku > 0) {
           obj.sku = item.sku;
-          // Используем резолвленный offer_id, фоллбэк на переданный
+          // Только резолвленный offer_id — НЕ используем Tilda offer_id (там SKU числом)
           const resolvedOfferId = offerIdMap.get(item.sku);
           if (resolvedOfferId) {
             obj.offer_id = resolvedOfferId;
-          } else if (item.offer_id && item.offer_id.trim() !== "") {
-            obj.offer_id = item.offer_id;
           }
         } else if (item.offer_id && item.offer_id.trim() !== "") {
           obj.offer_id = item.offer_id;
@@ -159,12 +157,10 @@ async function buildCheckoutItems(
     .map((item) => {
       const obj: Record<string, any> = { quantity: item.quantity };
       if (item.sku && item.sku > 0) obj.sku = item.sku;
-      // Используем резолвленный offer_id, фоллбэк на переданный
+      // Только резолвленный offer_id — НЕ используем Tilda offer_id (там SKU числом)
       const resolvedOfferId = offerIdMap.get(item.sku);
       if (resolvedOfferId) {
         obj.offer_id = resolvedOfferId;
-      } else if (item.offer_id && item.offer_id.trim() !== "") {
-        obj.offer_id = item.offer_id;
       }
       return obj;
     })
