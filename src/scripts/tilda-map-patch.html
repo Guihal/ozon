@@ -167,7 +167,11 @@
             if (data.daysMin !== undefined && data.daysMax !== undefined) {
               service.days = `${data.daysMin}-${data.daysMax} дн.`;
             }
-            window.tcart__updateTotal();
+            if (
+              typeof window.tcart__updateTotalProductsinCartObj === "function"
+            ) {
+              tcart__updateTotalProductsinCartObj();
+            }
           }
         } else {
           ozonState.checkoutPassed = false;
@@ -210,7 +214,11 @@
             if (data.daysMin !== undefined && data.daysMax !== undefined) {
               service.days = `${data.daysMin}-${data.daysMax} дн.`;
             }
-            window.tcart__updateTotal();
+            if (
+              typeof window.tcart__updateTotalProductsinCartObj === "function"
+            ) {
+              tcart__updateTotalProductsinCartObj();
+            }
           }
         } else {
           ozonState.checkoutPassed = false;

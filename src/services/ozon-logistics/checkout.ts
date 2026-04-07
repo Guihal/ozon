@@ -1,5 +1,4 @@
 import { queuedOzonRequest } from "../../utils/requestQueue";
-import { resolveOfferIds } from "./product";
 import * as logger from "../../utils/logger";
 
 export interface DeliveryPriceRequest {
@@ -35,29 +34,14 @@ export async function getDeliveryPrice(
     logger.log(`   Items from request:`, JSON.stringify(req.items));
 
     // /v2/delivery/checkout — проверяем доступность и получаем цену
-
-    // Формируем items: Tilda sku = Ozon SKU, но offer_id нужно резолвить
-    // Сначала собираем SKU для резолва offer_id
-    const skusToResolve = req.items
-      .filter((item) => item.sku && item.sku > 0)
-      .map((item) => item.sku);
-
-    const offerIdMap =
-      skusToResolve.length > 0
-        ? await resolveOfferIds(skusToResolve)
-        : new Map<number, string>();
-
+    // Отправляем только sku — нет прав на /v3/product/info/list для резолва offer_id
     const items = req.items
       .map((item) => {
         const obj: Record<string, any> = { quantity: item.quantity };
         if (item.sku && item.sku > 0) {
           obj.sku = item.sku;
-          // Только резолвленный offer_id — НЕ используем Tilda offer_id (там SKU числом)
-          const resolvedOfferId = offerIdMap.get(item.sku);
-          if (resolvedOfferId) {
-            obj.offer_id = resolvedOfferId;
-          }
-        } else if (item.offer_id && item.offer_id.trim() !== "") {
+        }
+        if (item.offer_id && item.offer_id.trim() !== "") {
           obj.offer_id = item.offer_id;
         }
         return obj;
@@ -139,29 +123,18 @@ function daysBetween(a: Date, b: Date): number {
 }
 
 /**
- * Формирует checkout items из запроса, резолвя offer_id через Ozon API
+ * Формирует checkout items из запроса
+ * Отправляем только sku — нет прав на /v3/product/info/list для резолва offer_id
  */
-async function buildCheckoutItems(
+function buildCheckoutItems(
   items: { sku: number; quantity: number; offer_id: string }[],
-): Promise<Record<string, any>[]> {
-  // Собираем SKU для резолва
-  const skusToResolve = items
-    .filter((item) => item.sku && item.sku > 0)
-    .map((item) => item.sku);
-
-  const offerIdMap =
-    skusToResolve.length > 0
-      ? await resolveOfferIds(skusToResolve)
-      : new Map<number, string>();
-
+): Record<string, any>[] {
   return items
     .map((item) => {
       const obj: Record<string, any> = { quantity: item.quantity };
       if (item.sku && item.sku > 0) obj.sku = item.sku;
-      // Только резолвленный offer_id — НЕ используем Tilda offer_id (там SKU числом)
-      const resolvedOfferId = offerIdMap.get(item.sku);
-      if (resolvedOfferId) {
-        obj.offer_id = resolvedOfferId;
+      if (item.offer_id && item.offer_id.trim() !== "") {
+        obj.offer_id = item.offer_id;
       }
       return obj;
     })
@@ -207,7 +180,7 @@ export async function getCourierDeliveryPrice(
       `🔄 Получение цены курьерской доставки (${req.latitude}, ${req.longitude})...`,
     );
 
-    const items = await buildCheckoutItems(req.items);
+    const items = buildCheckoutItems(req.items);
 
     if (items.length === 0) {
       logger.warn(
