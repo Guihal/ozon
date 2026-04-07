@@ -147,6 +147,11 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     const checkoutData = checkoutResult.data as any;
     const splits: OzonOrderSplit[] = [];
 
+    logger.log(
+      `📦 Checkout response splits:`,
+      JSON.stringify(checkoutData.splits, null, 2),
+    );
+
     if (!checkoutData.splits || checkoutData.splits.length === 0) {
       throw new Error("Ozon checkout не вернул доступных splits");
     }
