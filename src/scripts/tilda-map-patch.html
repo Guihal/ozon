@@ -26,12 +26,14 @@
     const ozonState = {
       phoneChecked: false,
       phoneValid: false,
+      phoneTouched: false, // пользователь уже взаимодействовал с полем телефона
       deliverySelected: false,
       checkoutPassed: false,
       deliveryType: null, // "pickup" | "courier" | null
     };
 
     function getErrorMessage() {
+      if (!ozonState.phoneTouched) return ""; // не показываем ошибку пока не трогали телефон
       if (!ozonState.phoneValid) return "Введите номер телефона";
       if (!ozonState.phoneChecked)
         return "Доставка Ozon недоступна для этого номера";
@@ -63,6 +65,7 @@
 
     function updatePurchaseButton() {
       const canPurchase =
+        ozonState.phoneTouched &&
         ozonState.phoneChecked &&
         ozonState.deliverySelected &&
         ozonState.checkoutPassed;
@@ -83,9 +86,23 @@
      * Получает items корзины в формате для API
      */
     function getCartItems() {
-      return (window.tcart.products || [])
+      const products = window.tcart.products || [];
+      console.log(
+        "[OzonPatch] Raw cart products:",
+        JSON.stringify(
+          products.map((p) => ({
+            name: p.name,
+            sku: p.sku,
+            externalid: p.externalid,
+            uid: p.uid,
+            options: p.options,
+            quantity: p.quantity,
+          })),
+        ),
+      );
+      return products
         .map((p) => {
-          const skuRaw = (p.sku || "").toString().trim();
+          const skuRaw = (p.sku || p.externalid || "").toString().trim();
           const skuNum = parseInt(skuRaw, 10);
           return {
             sku: isNaN(skuNum) ? undefined : skuNum,
@@ -513,46 +530,162 @@
 
         // ==============================================
         // 5. ПРОВЕРКА ТЕЛЕФОНА
+        // Используем Тильдовский hidden input js-phonemask-result
+        // который содержит чистый номер после маски
         // ==============================================
-        document.body.addEventListener(
-          "blur",
-          async (e) => {
-            if (e.target.name === "phone") {
-              const phone = e.target.value.replace(/\D/g, "");
-              ozonState.phoneValid = phone.length === 11;
+        let phoneCheckDebounce = null;
+        let lastCheckedPhone = "";
 
-              if (phone.length === 11) {
-                try {
-                  const res = await fetch(`${BACKEND}/v1/delivery/check`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ client_phone: phone }),
-                  });
-                  const d = await res.json();
-                  ozonState.phoneChecked = d.is_possible === true;
-                } catch (err) {
-                  console.warn("[OzonPatch] Phone check error:", err);
-                  ozonState.phoneChecked = false;
-                }
-              } else {
-                ozonState.phoneChecked = false;
-              }
-              updatePurchaseButton();
+        async function checkPhoneWithOzon(phone) {
+          if (phone === lastCheckedPhone && ozonState.phoneChecked) return;
+          lastCheckedPhone = phone;
+
+          try {
+            const res = await fetch(`${BACKEND}/v1/delivery/check`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ client_phone: phone }),
+            });
+            const d = await res.json();
+            ozonState.phoneChecked = d.is_possible === true;
+          } catch (err) {
+            console.warn("[OzonPatch] Phone check error:", err);
+            ozonState.phoneChecked = false;
+          }
+          updatePurchaseButton();
+
+          // После успешного check — перезапускаем checkout если доставка уже выбрана
+          if (ozonState.phoneChecked && ozonState.deliverySelected) {
+            rerunCheckout();
+          }
+        }
+
+        /**
+         * Перезапуск checkout с текущими параметрами доставки
+         * Нужен при смене телефона — checkout зависит от buyerPhone
+         */
+        function rerunCheckout() {
+          if (ozonState.deliveryType === "pickup") {
+            const mapPointId = document.querySelector(
+              '.t706 [name="ozon_map_point_id"]',
+            )?.value;
+            if (mapPointId) {
+              updateOzonPrice(OZON_PICKUP_ID, mapPointId);
+            }
+          } else if (ozonState.deliveryType === "courier") {
+            // Для курьера нужно перегеокодить адрес → он сам вызовет updateCourierPrice
+            const addrInput =
+              document.querySelector(
+                '.t706 input[name="tildadelivery-address"]',
+              ) ||
+              document.querySelector('.t706 input[name="delivery_address"]') ||
+              document.querySelector(".t706 .t-input-group_da input");
+            if (addrInput?.value) {
+              geocodeAndUpdateCourier(addrInput.value);
+            }
+          }
+        }
+
+        function handlePhoneChange() {
+          ozonState.phoneTouched = true;
+
+          // Пробуем Тильдовский hidden input с чистым номером (приоритет)
+          const phoneMaskInput = document.querySelector(
+            ".t706 .js-phonemask-result",
+          );
+          let phone = "";
+          if (phoneMaskInput && phoneMaskInput.value) {
+            phone = phoneMaskInput.value.replace(/\D/g, "");
+          } else {
+            // Фоллбэк — обычное поле phone
+            const phoneInput = document.querySelector(
+              '.t706 input[name="phone"]',
+            );
+            if (phoneInput) phone = phoneInput.value.replace(/\D/g, "");
+          }
+
+          // Нормализуем: 8xxx → 7xxx
+          if (phone.startsWith("8") && phone.length === 11) {
+            phone = "7" + phone.slice(1);
+          }
+
+          const isValid = phone.length === 11 && phone.startsWith("7");
+          ozonState.phoneValid = isValid;
+
+          if (isValid) {
+            // Телефон валиден по маске — делаем запрос check с дебаунсом
+            ozonState.checkoutPassed = false; // сбрасываем checkout — будет перезапущен после check
+            clearTimeout(phoneCheckDebounce);
+            phoneCheckDebounce = setTimeout(
+              () => checkPhoneWithOzon(phone),
+              600,
+            );
+          } else {
+            ozonState.phoneChecked = false;
+            ozonState.checkoutPassed = false;
+            lastCheckedPhone = "";
+          }
+          updatePurchaseButton();
+        }
+
+        // Слушаем input на поле телефона (работает с маской Тильды)
+        document.body.addEventListener(
+          "input",
+          (e) => {
+            const el = e.target;
+            if (
+              el.name === "phone" ||
+              el.classList.contains("js-phonemask-result") ||
+              el.name?.startsWith("tildaspec-phone")
+            ) {
+              handlePhoneChange();
             }
           },
           true,
         );
 
-        // Сброс при вводе нового телефона
+        // На blur тоже проверяем (финальная проверка после маски)
         document.body.addEventListener(
-          "input",
+          "blur",
           (e) => {
-            if (e.target.name === "phone") {
-              ozonState.phoneChecked = false;
-              updatePurchaseButton();
+            if (
+              e.target.name === "phone" ||
+              e.target.classList.contains("js-phonemask-result")
+            ) {
+              handlePhoneChange();
             }
           },
           true,
+        );
+
+        // MutationObserver на js-phonemask-result (Тильда обновляет value программно)
+        waitFor(
+          () => document.querySelector(".t706 .js-phonemask-result"),
+          (phoneMaskEl) => {
+            const phoneObserver = new MutationObserver(() =>
+              handlePhoneChange(),
+            );
+            phoneObserver.observe(phoneMaskEl, {
+              attributes: true,
+              attributeFilter: ["value"],
+            });
+            // Также перехватываем value setter
+            const desc = Object.getOwnPropertyDescriptor(
+              HTMLInputElement.prototype,
+              "value",
+            );
+            if (desc && desc.set) {
+              const origSet = desc.set;
+              Object.defineProperty(phoneMaskEl, "value", {
+                get: desc.get,
+                set(val) {
+                  origSet.call(this, val);
+                  handlePhoneChange();
+                },
+                configurable: true,
+              });
+            }
+          },
         );
 
         // Блокируем кнопку при инициализации

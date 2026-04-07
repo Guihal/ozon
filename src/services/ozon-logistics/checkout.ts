@@ -109,15 +109,16 @@ export async function getDeliveryPrice(
 
     const timeslot = split.delivery_method?.timeslots?.[0];
 
+    const dateFrom =
+      timeslot?.logistic_date_range?.from || timeslot?.client_date_range?.from;
+    const dateTo =
+      timeslot?.logistic_date_range?.to || timeslot?.client_date_range?.to;
+
     const priceResult = {
       price: 0, // /v2/checkout не возвращает цену — нужен /v2/order/create
       currency: "RUB",
-      daysMin: timeslot
-        ? daysBetween(new Date(), new Date(timeslot.client_date_range.from))
-        : 0,
-      daysMax: timeslot
-        ? daysBetween(new Date(), new Date(timeslot.client_date_range.to))
-        : 0,
+      daysMin: dateFrom ? daysBetween(new Date(), new Date(dateFrom)) : 0,
+      daysMax: dateTo ? daysBetween(new Date(), new Date(dateTo)) : 0,
     };
 
     logger.log(
@@ -180,16 +181,16 @@ function extractDeliveryResult(data: any): DeliveryPriceResult {
   }
 
   const timeslot = split.delivery_method?.timeslots?.[0];
+  const dateFrom =
+    timeslot?.logistic_date_range?.from || timeslot?.client_date_range?.from;
+  const dateTo =
+    timeslot?.logistic_date_range?.to || timeslot?.client_date_range?.to;
 
   return {
     price: 0,
     currency: "RUB",
-    daysMin: timeslot
-      ? daysBetween(new Date(), new Date(timeslot.client_date_range.from))
-      : 0,
-    daysMax: timeslot
-      ? daysBetween(new Date(), new Date(timeslot.client_date_range.to))
-      : 0,
+    daysMin: dateFrom ? daysBetween(new Date(), new Date(dateFrom)) : 0,
+    daysMax: dateTo ? daysBetween(new Date(), new Date(dateTo)) : 0,
   };
 }
 
