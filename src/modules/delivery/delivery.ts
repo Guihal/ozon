@@ -43,14 +43,14 @@ export const delivery = new Elysia({ prefix: "/v1" })
     },
   )
   // HEAD/GET для Tilda — проверяет доступность webhook URL перед сохранением
-  .head("/order/create", () => new Response(null, { status: 200 }))
-  .get("/order/create", () => ({
+  .head("/order/webhook", () => new Response(null, { status: 200 }))
+  .get("/order/webhook", () => ({
     success: true,
     message: "Webhook endpoint is active",
   }))
   // Endpoint для создания заказа — вызывает Ozon API
   .post(
-    "/order/create",
+    "/order/webhook",
     async ({ body, request, headers, set }) => {
       try {
         const sourceIp =
