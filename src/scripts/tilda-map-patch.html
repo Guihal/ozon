@@ -265,6 +265,8 @@
           // Сохраняем координаты и тип доставки
           setHiddenInput("ozon_delivery_type", "courier");
           setHiddenInput("ozon_map_point_id", "");
+          setHiddenInput("ozon_courier_lat", String(lat));
+          setHiddenInput("ozon_courier_lon", String(lon));
 
           ozonState.deliverySelected = true;
           ozonState.deliveryType = "courier";

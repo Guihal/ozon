@@ -126,14 +126,26 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
   }
 
   try {
-    // Шаг 1: Для курьера — геокодирование адреса (нужно и для checkout, и для order/create)
+    // Шаг 1: Для курьера — координаты (из webhook или геокод)
     let courierCoords: { lat: number; lon: number } | null = null;
     if (deliveryType === "courier") {
-      courierCoords = await geocodeAddress(payment.delivery_address);
-      if (!courierCoords) {
-        throw new Error(
-          `Не удалось геокодировать адрес: "${payment.delivery_address}"`,
-        );
+      const webhookLat = parseFloat(webhook.ozon_courier_lat);
+      const webhookLon = parseFloat(webhook.ozon_courier_lon);
+      if (
+        webhookLat &&
+        webhookLon &&
+        !isNaN(webhookLat) &&
+        !isNaN(webhookLon)
+      ) {
+        courierCoords = { lat: webhookLat, lon: webhookLon };
+        logger.log(`📍 Координаты из webhook: ${webhookLat}, ${webhookLon}`);
+      } else {
+        courierCoords = await geocodeAddress(payment.delivery_address);
+        if (!courierCoords) {
+          throw new Error(
+            `Не удалось геокодировать адрес: "${payment.delivery_address}"`,
+          );
+        }
       }
     }
 
