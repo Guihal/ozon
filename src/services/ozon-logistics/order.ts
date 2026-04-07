@@ -173,7 +173,10 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
 
       splits.push({
         delivery_method: {
-          delivery_method_id: split.delivery_method.delivery_method_id || 0,
+          delivery_method_id:
+            split.delivery_method.id ||
+            split.delivery_method.delivery_method_id ||
+            0,
           delivery_type: deliveryType === "courier" ? "COURIER" : "PICKUP",
           logistic_date_range: {
             from:
