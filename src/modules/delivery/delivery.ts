@@ -77,8 +77,8 @@ export const delivery = new Elysia({ prefix: "/v1" })
 
         if (expectedKey && apiKey !== expectedKey) {
           console.warn(`⚠️  /order/webhook — неверный API-ключ от ${sourceIp}`);
-          set.status = 403;
-          return { success: false, error: "Forbidden" };
+          // Всегда 200 для Тильды — иначе она блочит webhook
+          return { success: false, error: "Invalid API key" };
         }
 
         console.log("🛒 Получен запрос на создание заказа /order/create");
@@ -127,7 +127,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
         const result = await createOzonOrder(webhook);
 
         if (!result.success) {
-          set.status = 500;
+          // Всегда 200 для Тильды — иначе она блочит webhook
           return {
             success: false,
             error: result.error,
@@ -142,8 +142,8 @@ export const delivery = new Elysia({ prefix: "/v1" })
           postings: result.postings,
         };
       } catch (error) {
-        console.error("❌ Ошибка в /order/create:", error);
-        set.status = 500;
+        console.error("❌ Ошибка в /order/webhook:", error);
+        // Всегда 200 для Тильды — иначе она блочит webhook
         return {
           success: false,
           error: error instanceof Error ? error.message : "Неизвестная ошибка",
