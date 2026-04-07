@@ -40,6 +40,7 @@ const app = new Elysia()
         "X-Requested-With",
         "Accept",
         "Origin",
+        "Api-Key",
       ],
       // exposedHeaders: ["Content-Type", "Authorization"],
       credentials: true,
