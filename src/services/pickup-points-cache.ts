@@ -428,8 +428,11 @@ export async function initializePickupPointsCache(): Promise<void> {
 
     // Проверяем свежесть данных — обновляем только если старше 24 часов
     if (lastUpdate) {
-      const lastUpdateTime = new Date(lastUpdate).getTime();
+      const lastUpdateTime = new Date(lastUpdate + "Z").getTime();
       const hoursAgo = (Date.now() - lastUpdateTime) / (1000 * 60 * 60);
+      console.log(
+        `   lastUpdate="${lastUpdate}", parsed=${lastUpdateTime}, hoursAgo=${hoursAgo.toFixed(1)}`,
+      );
       if (hoursAgo < 24) {
         console.log(
           `✅ Данные свежие (${hoursAgo.toFixed(1)}ч назад) — пропускаем загрузку из API`,

@@ -140,6 +140,7 @@ export async function queuedOzonRequest(
   // 401 — пробуем refresh
   const refreshToken = getRefreshToken();
   if (refreshToken) {
+    let newToken: string | null = null;
     try {
       logger.log("🔄 Токен истёк, обновляем...");
       const newTokenData = await fetchAccessToken(
@@ -147,23 +148,29 @@ export async function queuedOzonRequest(
         undefined,
         refreshToken,
       );
-      const retryResult = await executeRequest(
-        endpoint,
-        method,
-        body,
-        newTokenData.access_token,
-      );
-
-      if (retryResult.httpStatus >= 400) {
-        throw retryResult.data;
-      }
-      return { data: retryResult.data, queued: false };
+      newToken = newTokenData.access_token;
     } catch (refreshError) {
       logger.critical(
         "Refresh token не работает",
         "Токен истёк и refresh не удался. Требуется повторная авторизация.",
         refreshError,
       );
+    }
+
+    // Если refresh удался — повторяем исходный запрос
+    if (newToken) {
+      const retryResult = await executeRequest(
+        endpoint,
+        method,
+        body,
+        newToken,
+      );
+
+      if (retryResult.httpStatus >= 400) {
+        // Это ошибка API, а не auth — пробрасываем наверх
+        throw retryResult.data;
+      }
+      return { data: retryResult.data, queued: false };
     }
   }
 

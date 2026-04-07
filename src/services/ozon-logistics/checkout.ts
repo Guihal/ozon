@@ -1,4 +1,5 @@
 import { queuedOzonRequest } from "../../utils/requestQueue";
+import { resolveOfferIds } from "./product";
 import * as logger from "../../utils/logger";
 
 export interface DeliveryPriceRequest {
@@ -35,15 +36,31 @@ export async function getDeliveryPrice(
 
     // /v2/delivery/checkout — проверяем доступность и получаем цену
 
-    // Формируем items: Tilda sku = Ozon offer_id (артикул продавца)
+    // Формируем items: Tilda sku = Ozon SKU, но offer_id нужно резолвить
+    // Сначала собираем SKU для резолва offer_id
+    const skusToResolve = req.items
+      .filter((item) => item.sku && item.sku > 0)
+      .map((item) => item.sku);
+
+    const offerIdMap =
+      skusToResolve.length > 0
+        ? await resolveOfferIds(skusToResolve)
+        : new Map<number, string>();
+
     const items = req.items
       .map((item) => {
         const obj: Record<string, any> = { quantity: item.quantity };
-        if (item.offer_id && item.offer_id.trim() !== "") {
-          obj.offer_id = item.offer_id;
-        }
         if (item.sku && item.sku > 0) {
           obj.sku = item.sku;
+          // Используем резолвленный offer_id, фоллбэк на переданный
+          const resolvedOfferId = offerIdMap.get(item.sku);
+          if (resolvedOfferId) {
+            obj.offer_id = resolvedOfferId;
+          } else if (item.offer_id && item.offer_id.trim() !== "") {
+            obj.offer_id = item.offer_id;
+          }
+        } else if (item.offer_id && item.offer_id.trim() !== "") {
+          obj.offer_id = item.offer_id;
         }
         return obj;
       })
@@ -123,17 +140,32 @@ function daysBetween(a: Date, b: Date): number {
 }
 
 /**
- * Формирует checkout items из запроса
+ * Формирует checkout items из запроса, резолвя offer_id через Ozon API
  */
-function buildCheckoutItems(
+async function buildCheckoutItems(
   items: { sku: number; quantity: number; offer_id: string }[],
-): Record<string, any>[] {
+): Promise<Record<string, any>[]> {
+  // Собираем SKU для резолва
+  const skusToResolve = items
+    .filter((item) => item.sku && item.sku > 0)
+    .map((item) => item.sku);
+
+  const offerIdMap =
+    skusToResolve.length > 0
+      ? await resolveOfferIds(skusToResolve)
+      : new Map<number, string>();
+
   return items
     .map((item) => {
       const obj: Record<string, any> = { quantity: item.quantity };
       if (item.sku && item.sku > 0) obj.sku = item.sku;
-      if (item.offer_id && item.offer_id.trim() !== "")
+      // Используем резолвленный offer_id, фоллбэк на переданный
+      const resolvedOfferId = offerIdMap.get(item.sku);
+      if (resolvedOfferId) {
+        obj.offer_id = resolvedOfferId;
+      } else if (item.offer_id && item.offer_id.trim() !== "") {
         obj.offer_id = item.offer_id;
+      }
       return obj;
     })
     .filter((item) => item.sku || item.offer_id);
@@ -178,7 +210,7 @@ export async function getCourierDeliveryPrice(
       `🔄 Получение цены курьерской доставки (${req.latitude}, ${req.longitude})...`,
     );
 
-    const items = buildCheckoutItems(req.items);
+    const items = await buildCheckoutItems(req.items);
 
     if (items.length === 0) {
       logger.warn(
