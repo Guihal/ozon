@@ -65,13 +65,18 @@ export const delivery = new Elysia({ prefix: "/v1" })
         const userAgent =
           headers["user-agent"] || request.headers.get("user-agent") || "";
 
-        // Проверка API-ключа от Тильды
+        // Проверка API-ключа от Тильды (header или POST body)
         const apiKey =
-          headers["api-key"] || request.headers.get("api-key") || "";
+          headers["api-key"] ||
+          request.headers.get("api-key") ||
+          (body as any)?.["Api-Key"] ||
+          (body as any)?.["api-key"] ||
+          (body as any)?.["apikey"] ||
+          "";
         const expectedKey = ozonConfig.tildaWebhookApiKey;
 
         if (expectedKey && apiKey !== expectedKey) {
-          console.warn(`⚠️  /order/create — неверный API-ключ от ${sourceIp}`);
+          console.warn(`⚠️  /order/webhook — неверный API-ключ от ${sourceIp}`);
           set.status = 403;
           return { success: false, error: "Forbidden" };
         }
