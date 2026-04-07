@@ -328,10 +328,24 @@ function parseName(fullName: string): {
   lastName: string;
 } {
   const parts = fullName.trim().split(/\s+/);
+  let firstName: string;
+  let lastName: string;
   if (parts.length >= 2) {
-    return { firstName: parts.slice(1).join(" "), lastName: parts[0] };
+    firstName = parts.slice(1).join(" ");
+    lastName = parts[0];
+  } else {
+    firstName = parts[0] || "";
+    lastName = "";
   }
-  return { firstName: parts[0] || "", lastName: "" };
+  // Ozon требует: ^[\p{L}\p{Zs}\p{Pd}.]{1,50}$ — убираем лишнее, ставим фоллбэк
+  const sanitize = (s: string) =>
+    s
+      .replace(/[^\p{L}\p{Zs}\p{Pd}.]/gu, "")
+      .trim()
+      .slice(0, 50);
+  firstName = sanitize(firstName) || "Покупатель";
+  lastName = sanitize(lastName) || "Не указана";
+  return { firstName, lastName };
 }
 
 /**
