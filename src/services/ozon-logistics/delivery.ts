@@ -104,10 +104,6 @@ export async function getPickupPointsInfo(
   }
 
   try {
-    logger.log(
-      `🔄 Получение информации о ${mapPointIds.length} точках самовывоза...`,
-    );
-
     const client = new OzonApiClient(
       ozonConfig.apiUrl,
       token,
@@ -117,7 +113,6 @@ export async function getPickupPointsInfo(
       map_point_ids: mapPointIds,
     });
 
-    logger.log(`✅ Получена информация о ${data.points.length} точках`);
     return data;
   } catch (error) {
     logger.error("❌ Ошибка при получении информации о точках:", error);
