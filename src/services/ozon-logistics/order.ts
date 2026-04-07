@@ -130,7 +130,6 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
       courierCoords,
     );
     logger.log(`🔄 Checkout для заказа ${tildaOrderId}...`);
-    logger.log(`   Checkout body: ${JSON.stringify(checkoutBody)}`);
 
     const checkoutResult = await queuedOzonRequest(
       "/v2/delivery/checkout",
@@ -143,7 +142,6 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     }
 
     const checkoutData = checkoutResult.data as any;
-    logger.log(`   Checkout response: ${JSON.stringify(checkoutData)}`);
     const splits: OzonOrderSplit[] = [];
 
     if (!checkoutData.splits || checkoutData.splits.length === 0) {
@@ -245,7 +243,6 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     };
 
     logger.log(`🔄 Создание заказа ${tildaOrderId} в Ozon...`);
-    logger.log(`   Order body: ${JSON.stringify(orderBody)}`);
 
     const orderResult = await queuedOzonRequest(
       "/v2/order/create",
@@ -275,7 +272,8 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
       tildaOrderId,
     );
 
-    logger.log(`✅ Заказ создан: ${orderData.order_number}`);
+    logger.log(`✅ Заказ создан в Ozon: ${orderData.order_number}`);
+    logger.log(`   Tilda order: ${tildaOrderId}`);
     logger.log(`   Postings: ${orderData.postings.join(", ")}`);
 
     return {

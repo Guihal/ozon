@@ -131,8 +131,6 @@ async function fetchAllPointsInfo(points: PickupPointItem[]): Promise<void> {
       .map((p) => p.map_point_id.toString());
 
     try {
-      console.log(`📦 Пачка ${i + 1}/${batches} (точки ${start + 1}-${end})`);
-
       const response = await getPickupPointsInfo(batchIds);
 
       // Сохраняем пачку сразу в БД транзакцией — НЕ копим в памяти
@@ -430,9 +428,6 @@ export async function initializePickupPointsCache(): Promise<void> {
     if (lastUpdate) {
       const lastUpdateTime = new Date(lastUpdate + "Z").getTime();
       const hoursAgo = (Date.now() - lastUpdateTime) / (1000 * 60 * 60);
-      console.log(
-        `   lastUpdate="${lastUpdate}", parsed=${lastUpdateTime}, hoursAgo=${hoursAgo.toFixed(1)}`,
-      );
       if (hoursAgo < 24) {
         console.log(
           `✅ Данные свежие (${hoursAgo.toFixed(1)}ч назад) — пропускаем загрузку из API`,
