@@ -726,3 +726,95 @@ Content-Type: application/json
 | POST  | `/v1/posting/cancel`                | Отменить отправление                |
 | POST  | `/v1/posting/cancel/status`         | Статус отмены отправления           |
 | POST  | `/v1/posting/marks`                 | Маркировки экземпляров отправления  |
+| POST  | `/v3/product/info/list`             | Получить товары по SKU/offer_id     |
+
+---
+
+## Товары
+
+### Получить информацию о товарах по идентификаторам
+
+`POST /v3/product/info/list`
+
+Метод для получения информации о товарах по их идентификаторам. Используется для резолва `offer_id` по `sku`.
+
+> **Важно**: В одном запросе можно передать не больше 1000 товаров по параметрам offer_id, product_id и sku в сумме.
+
+#### Авторизация
+
+Использует OAuth Bearer токен (как и остальные методы Ozon Logistics API).
+
+```
+Authorization: Bearer ACCESS_TOKEN
+```
+
+#### Request Body
+
+```json
+{
+  "sku": ["3419170304"]
+}
+```
+
+| Поле       | Тип              | Описание                                            |
+| ---------- | ---------------- | --------------------------------------------------- |
+| offer_id   | Array of strings | Артикул продавца (идентификатор в системе продавца) |
+| product_id | Array of strings | Идентификатор товара в системе Ozon (product_id)    |
+| sku        | Array of strings | Идентификатор товара в системе Ozon (SKU)           |
+
+> Передаётся массив **одного типа** идентификаторов. В нашем случае — `sku`.
+
+#### Response `200`
+
+```json
+{
+  "items": [
+    {
+      "id": 123456,
+      "name": "Название товара",
+      "offer_id": "ARTICLE-001",
+      "sku": 3419170304,
+      "price": "1990.00",
+      "old_price": "2500.00",
+      "currency_code": "RUB",
+      "stocks": { "coming": 0, "present": 10, "reserved": 2 },
+      "is_archived": false,
+      "is_kgt": false,
+      "created_at": "2025-01-15T10:00:00Z",
+      "updated_at": "2026-03-20T15:30:00Z"
+    }
+  ]
+}
+```
+
+Ключевые поля ответа:
+
+| Поле     | Тип     | Описание                                          |
+| -------- | ------- | ------------------------------------------------- |
+| offer_id | string  | **Артикул продавца** — нужен для checkout и order |
+| sku      | integer | SKU товара в системе Ozon                         |
+| name     | string  | Название товара                                   |
+| price    | string  | Цена с учётом скидок                              |
+| stocks   | object  | Остатки (present, reserved, coming)               |
+
+#### Использование в проекте
+
+```
+Tilda (sku: 3419170304)
+  → Бэкенд: resolveOfferIds([3419170304])
+    → POST /v3/product/info/list { sku: ["3419170304"] }
+    → Ответ: offer_id = "ARTICLE-001"
+    → Кешируется в Map<number, string>
+  → Подставляется в /v2/delivery/checkout и /v2/order/create
+```
+
+**Код**: `src/services/ozon-logistics/product.ts`
+
+#### Ошибки
+
+| Код | Описание          |
+| --- | ----------------- |
+| 400 | Неверный параметр |
+| 403 | Доступ запрещён   |
+| 404 | Товар не найден   |
+| 500 | Внутренняя ошибка |

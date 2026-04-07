@@ -42,31 +42,6 @@ export const delivery = new Elysia({ prefix: "/v1" })
       }),
     },
   )
-  // Endpoint для приёма callback'а от Tilda после оплаты (success)
-  .post(
-    "/delivery/tilda/success",
-    async ({ body }) => {
-      try {
-        console.log("🔔 Получен callback от Tilda /delivery/tilda/success");
-        console.log(JSON.stringify(body));
-
-        const LOG_DIR = join(__dirname, "..", "..", "cache");
-        if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
-        const file = join(LOG_DIR, "tilda-callbacks.log");
-        const entry = JSON.stringify({
-          received_at: new Date().toISOString(),
-          body: body,
-        });
-        appendFileSync(file, entry + "\n", "utf-8");
-
-        return { success: true };
-      } catch (error) {
-        console.error("❌ Ошибка в /delivery/tilda/success:", error);
-        throw error;
-      }
-    },
-    { body: t.Any() },
-  )
   // Endpoint для создания заказа — вызывает Ozon API
   .post(
     "/order/create",
