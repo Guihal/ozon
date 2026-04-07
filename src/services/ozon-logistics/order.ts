@@ -194,7 +194,7 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
           price: split.delivery_method.price || {
             currency_code: "RUB",
             nanos: 0,
-            units: 0,
+            units: 150,
           },
         },
         items: (split.items && split.items.length > 0
