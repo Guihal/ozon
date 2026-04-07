@@ -126,6 +126,9 @@ export const ozonConfig = {
   // Tilda webhook
   tildaWebhookApiKey: process.env.TILDA_WEBHOOK_API_KEY || "",
 
+  // Yandex Geocoder
+  yandexGeocoderApiKey: process.env.YANDEX_GEOCODER_API_KEY || "",
+
   // SMTP для уведомлений
   smtpHost: process.env.SMTP_HOST || "",
   smtpPort: parseInt(process.env.SMTP_PORT || "587", 10),
