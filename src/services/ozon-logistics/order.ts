@@ -191,6 +191,11 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
               "",
           },
           timeslot_id: timeslot.timeslot_id || 0,
+          price: split.delivery_method.price || {
+            currency_code: "RUB",
+            nanos: 0,
+            units: 0,
+          },
         },
         items: (split.items && split.items.length > 0
           ? split.items.map((i: any) => {
@@ -200,17 +205,40 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
                   (i.sku && it.sku === i.sku) ||
                   (i.offer_id && it.offer_id === i.offer_id),
               );
+              // Цена: из checkout → из webhook products → 0
+              const webhookProduct = payment.products.find(
+                (p: any) => parseInt(p.sku, 10) === (i.sku || matchedItem?.sku),
+              );
+              const priceUnits =
+                i.price?.units ??
+                Math.floor(Number(webhookProduct?.price || 0));
+              const priceNanos = i.price?.nanos ?? 0;
               return {
                 offer_id: i.offer_id || matchedItem?.offer_id || "",
+                price: {
+                  currency_code: i.price?.currency_code || "RUB",
+                  nanos: priceNanos,
+                  units: priceUnits,
+                },
                 quantity: i.quantity || matchedItem?.quantity || 1,
                 sku: i.sku || matchedItem?.sku || 0,
               };
             })
-          : items.map((i) => ({
-              offer_id: i.offer_id,
-              quantity: i.quantity,
-              sku: i.sku,
-            }))
+          : items.map((i) => {
+              const webhookProduct = payment.products.find(
+                (p: any) => parseInt(p.sku, 10) === i.sku,
+              );
+              return {
+                offer_id: i.offer_id,
+                price: {
+                  currency_code: "RUB",
+                  nanos: 0,
+                  units: Math.floor(Number(webhookProduct?.price || 0)),
+                },
+                quantity: i.quantity,
+                sku: i.sku,
+              };
+            })
         ).filter((i: any) => i.sku > 0 || (i.offer_id && i.offer_id !== "")),
         warehouse_id: split.warehouse_id || 0,
       });
