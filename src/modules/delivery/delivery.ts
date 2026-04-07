@@ -202,7 +202,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
   })
   .post(
     "/delivery/price",
-    async ({ body }) => {
+    async ({ body, set }) => {
       try {
         console.log(
           `🔄 Получение цены доставки для точки ${body.mapPointId}...`,
@@ -220,7 +220,11 @@ export const delivery = new Elysia({ prefix: "/v1" })
         };
       } catch (error) {
         console.error("❌ Ошибка в endpoint /delivery/price:", error);
-        throw error;
+        set.status = 500;
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Доставка недоступна",
+        };
       }
     },
     {

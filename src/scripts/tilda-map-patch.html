@@ -27,6 +27,7 @@
       phoneChecked: false,
       phoneValid: false,
       deliverySelected: false,
+      checkoutPassed: false,
       deliveryType: null, // "pickup" | "courier" | null
     };
 
@@ -36,6 +37,8 @@
         return "Доставка Ozon недоступна для этого номера";
       if (!ozonState.deliverySelected)
         return "Выберите пункт выдачи или введите адрес доставки";
+      if (!ozonState.checkoutPassed)
+        return "Доставка недоступна для выбранных товаров";
       return "";
     }
 
@@ -59,7 +62,10 @@
     }
 
     function updatePurchaseButton() {
-      const canPurchase = ozonState.phoneChecked && ozonState.deliverySelected;
+      const canPurchase =
+        ozonState.phoneChecked &&
+        ozonState.deliverySelected &&
+        ozonState.checkoutPassed;
       if (canPurchase) {
         if (typeof window.tcart__unblockSubmitButton === "function") {
           window.tcart__unblockSubmitButton();
@@ -79,13 +85,14 @@
     function getCartItems() {
       return (window.tcart.products || [])
         .map((p) => {
-          const offerId = (p.sku || "").toString().trim();
+          const skuRaw = (p.sku || "").toString().trim();
+          const skuNum = parseInt(skuRaw, 10);
           return {
-            offer_id: offerId,
+            sku: isNaN(skuNum) ? undefined : skuNum,
             quantity: parseInt(p.quantity) || 1,
           };
         })
-        .filter((p) => p.offer_id !== "");
+        .filter((p) => p.sku);
     }
 
     /**
@@ -119,6 +126,8 @@
      */
     async function updateOzonPrice(serviceId, mapPointId) {
       if (!mapPointId) return;
+      ozonState.checkoutPassed = false;
+      updatePurchaseButton();
       if (window.tcart__preloader) window.tcart__preloader.show();
       try {
         const res = await fetch(`${BACKEND}/v1/delivery/price`, {
@@ -132,6 +141,7 @@
         });
         const data = await res.json();
         if (data.success) {
+          ozonState.checkoutPassed = true;
           const service =
             window.tcart_newDelivery.deliveryState.services[serviceId];
           if (service) {
@@ -142,10 +152,15 @@
             }
             window.tcart__updateTotal();
           }
+        } else {
+          ozonState.checkoutPassed = false;
+          console.warn("[OzonPatch] Checkout failed:", data.error || data);
         }
       } catch (e) {
+        ozonState.checkoutPassed = false;
         console.warn("[OzonPatch] Price error:", e);
       } finally {
+        updatePurchaseButton();
         if (window.tcart__preloader) window.tcart__preloader.hide();
       }
     }
@@ -155,6 +170,8 @@
      */
     async function updateCourierPrice(serviceId, lat, lng) {
       if (!lat || !lng) return;
+      ozonState.checkoutPassed = false;
+      updatePurchaseButton();
       if (window.tcart__preloader) window.tcart__preloader.show();
       try {
         const res = await fetch(`${BACKEND}/v1/delivery/courier/price`, {
@@ -169,6 +186,7 @@
         });
         const data = await res.json();
         if (data.success) {
+          ozonState.checkoutPassed = true;
           const service =
             window.tcart_newDelivery.deliveryState.services[serviceId];
           if (service) {
@@ -178,11 +196,14 @@
             window.tcart__updateTotal();
           }
         } else {
+          ozonState.checkoutPassed = false;
           console.warn("[OzonPatch] Courier price unavailable:", data.error);
         }
       } catch (e) {
+        ozonState.checkoutPassed = false;
         console.warn("[OzonPatch] Courier price error:", e);
       } finally {
+        updatePurchaseButton();
         if (window.tcart__preloader) window.tcart__preloader.hide();
       }
     }
@@ -192,7 +213,14 @@
      * Используем Nominatim через backend
      */
     async function geocodeAndUpdateCourier(address) {
-      if (!address || address.trim().length < 5) return;
+      if (!address || address.trim().length < 5) {
+        ozonState.deliverySelected = false;
+        ozonState.checkoutPassed = false;
+        updatePurchaseButton();
+        return;
+      }
+      ozonState.checkoutPassed = false;
+      updatePurchaseButton();
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
@@ -220,10 +248,18 @@
         } else {
           console.warn(`[OzonPatch] Geocode failed for: "${address}"`);
           ozonState.deliverySelected = false;
+          ozonState.checkoutPassed = false;
           updatePurchaseButton();
+          showOzonError(
+            "Не удалось определить адрес. Проверьте правильность ввода.",
+          );
         }
       } catch (e) {
         console.warn("[OzonPatch] Geocode error:", e);
+        ozonState.deliverySelected = false;
+        ozonState.checkoutPassed = false;
+        updatePurchaseButton();
+        showOzonError("Ошибка при определении адреса. Попробуйте ещё раз.");
       }
     }
 
