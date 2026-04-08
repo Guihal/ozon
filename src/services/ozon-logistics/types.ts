@@ -265,8 +265,8 @@ export interface OzonOrderDeliveryPickup {
 }
 
 export interface OzonOrderDeliveryAddress {
-  address: {
-    coordinates: { lat: number; long: number };
+  courier: {
+    coordinates: { latitude: number; longitude: number };
   };
 }
 

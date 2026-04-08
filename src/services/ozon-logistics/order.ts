@@ -281,8 +281,11 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
 
     if (deliveryType === "courier") {
       delivery = {
-        address: {
-          coordinates: { lat: courierCoords!.lat, long: courierCoords!.lon },
+        courier: {
+          coordinates: {
+            latitude: courierCoords!.lat,
+            longitude: courierCoords!.lon,
+          },
         },
       };
     } else {
