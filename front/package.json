@@ -1,0 +1,13 @@
+{
+  "name": "ozon-tilda-patch",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^6.3.0",
+    "typescript": "^5.8.0"
+  }
+}

@@ -290,7 +290,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
           t.Object({
             sku: t.Number(),
             quantity: t.Number(),
-            offer_id: t.String(),
+            offer_id: t.Optional(t.String()),
           }),
         ),
         buyerPhone: t.Optional(t.String()),
