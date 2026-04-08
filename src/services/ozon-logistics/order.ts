@@ -280,12 +280,24 @@ export async function createOzonOrder(webhook: TildaWebhookBody): Promise<{
     let delivery: OzonOrderCreateRequest["delivery"];
 
     if (deliveryType === "courier") {
+      // Парсим адрес для Ozon: обязательные — city, country, house_number, coordinates
+      const addressParts = parseAddress(payment.delivery_address || "");
+      logger.log(`📍 Parsed address:`, JSON.stringify(addressParts));
       delivery = {
         courier: {
           coordinates: {
             latitude: courierCoords!.lat,
             longitude: courierCoords!.lon,
           },
+          country: "Россия",
+          city: payment.delivery_city || addressParts.city || "Не указан",
+          street: addressParts.street || "",
+          house_number: addressParts.house || "0",
+          apartment: addressParts.apartment || "",
+          entrance: addressParts.entrance || "",
+          floor: addressParts.floor || "",
+          zip_code: payment.delivery_zip || "",
+          comment: payment.delivery_comment || "",
         },
       };
     } else {
@@ -427,6 +439,81 @@ function normalizePhone(phone: string): string {
     return digits;
   }
   return digits;
+}
+
+/**
+ * Парсит адрес из Tilda delivery_address
+ * Формат: "RU: 344019, Ростов-на-Дону, Адрес, ул Советская, 33/1, 1, ent.: 1, fl.:1"
+ */
+function parseAddress(address: string): {
+  city: string;
+  street: string;
+  house: string;
+  apartment: string;
+  entrance: string;
+  floor: string;
+} {
+  // Убираем "RU:" или "Россия," в начале
+  let cleaned = address.replace(/^(RU:\s*|Россия,?\s*)/i, "").trim();
+  // Убираем индекс (6 цифр)
+  cleaned = cleaned.replace(/^\d{5,6},?\s*/, "");
+
+  // Извлекаем ent.: и fl.: если есть
+  const entranceMatch = cleaned.match(/ent\.?:\s*(\S+)/i);
+  const floorMatch = cleaned.match(/fl\.?:\s*(\S+)/i);
+  const entrance = entranceMatch?.[1] || "";
+  const floor = floorMatch?.[1] || "";
+
+  // Убираем ent./fl. из строки
+  cleaned = cleaned
+    .replace(/,?\s*ent\.?:\s*\S+/i, "")
+    .replace(/,?\s*fl\.?:\s*\S+/i, "")
+    .trim();
+
+  // Разбиваем по запятым
+  const parts = cleaned
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // parts[0] = город, parts[1] = "Адрес" (метка Тильды, пропускаем), parts[2] = улица, parts[3] = дом, parts[4] = квартира
+  const city = parts[0] || "";
+
+  // Ищем улицу — часть с "ул", "пр", "пер", "наб", "ш " и т.д.
+  let street = "";
+  let house = "";
+  let apartment = "";
+  let streetIdx = -1;
+
+  for (let i = 1; i < parts.length; i++) {
+    if (/^(ул|пр|пер|наб|ш\s|бул|пл\s|просп)/i.test(parts[i])) {
+      streetIdx = i;
+      street = parts[i];
+      break;
+    }
+  }
+
+  if (streetIdx === -1) {
+    // Не нашли по префиксу — берём первую часть после города, пропуская "Адрес"
+    const offset = parts[1]?.toLowerCase() === "адрес" ? 2 : 1;
+    street = parts[offset] || "";
+    streetIdx = offset;
+  }
+
+  // Следующие части — дом, квартира
+  if (streetIdx + 1 < parts.length) {
+    // Ищем часть с "д." или просто число/число
+    for (let i = streetIdx + 1; i < parts.length; i++) {
+      const p = parts[i].trim();
+      if (!house && /^(д\.?\s*)?[\d]/.test(p)) {
+        house = p.replace(/^д\.?\s*/, "").trim();
+      } else if (house && !apartment) {
+        apartment = p.replace(/^(кв\.?|кв\/оф\.?)\s*/i, "").trim();
+      }
+    }
+  }
+
+  return { city, street, house: house || "0", apartment, entrance, floor };
 }
 
 /**

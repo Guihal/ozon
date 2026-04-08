@@ -267,6 +267,17 @@ export interface OzonOrderDeliveryPickup {
 export interface OzonOrderDeliveryAddress {
   courier: {
     coordinates: { latitude: number; longitude: number };
+    country: string;
+    city: string;
+    street?: string;
+    house_number: string;
+    apartment?: string;
+    entrance?: string;
+    floor?: string;
+    intercom?: string;
+    region?: string;
+    zip_code?: string;
+    comment?: string;
   };
 }
 
