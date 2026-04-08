@@ -42,3 +42,8 @@ package-lock.json
 **/*.bun
 
 .env
+
+# Keys & secrets
+key
+key.pub
+*.pem
