@@ -364,6 +364,12 @@
           return Promise.resolve();
         };
 
+        // Сносим старые точки с карты перед добавлением новых
+        const geoObjects = map.geoObjects;
+        if (geoObjects) {
+          geoObjects.removeAll();
+        }
+
         // Вызываем метод Тильды для добавления точек на карту
         delivery.mapAddPoints(null, points, deliveryWrapper);
 
