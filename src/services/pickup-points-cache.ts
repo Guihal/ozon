@@ -391,6 +391,14 @@ export function getTildaPickupPointsByIds(
 }
 
 /**
+ * Очищает таблицу pickup_points перед обновлением
+ */
+function clearPickupPoints(): void {
+  db.run("DELETE FROM pickup_points");
+  logger.log("🗑️ Таблица pickup_points очищена");
+}
+
+/**
  * Перестройка FTS индекса из существующих данных
  */
 export function rebuildFts(): void {
@@ -452,7 +460,10 @@ export async function initializePickupPointsCache(): Promise<void> {
     logger.log("📍 Шаг 1: Получение базового списка точек...");
     const listResponse = await getPickupPointsList();
 
-    logger.log("📍 Шаг 2: Получение и сохранение детальной информации...");
+    logger.log("📍 Шаг 2: Очистка старых данных...");
+    clearPickupPoints();
+
+    logger.log("📍 Шаг 3: Получение и сохранение детальной информации...");
     await fetchAllPointsInfo(listResponse.points);
     rebuildFts();
     logger.log("✅ Кэш точек самовывоза успешно обновлён из API");
@@ -481,6 +492,7 @@ export async function refreshPickupPointsCache(): Promise<void> {
 
   try {
     const listResponse = await getPickupPointsList();
+    clearPickupPoints();
     await fetchAllPointsInfo(listResponse.points);
     rebuildFts();
     logger.log("✅ Кэш точек самовывоза успешно обновлён");
