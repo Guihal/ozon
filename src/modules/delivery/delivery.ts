@@ -1,4 +1,5 @@
 import Elysia, { t } from "elysia";
+import * as logger from "../../utils/logger";
 import {
   checkDeliveryAvailability,
   getDeliveryMapClusters,
@@ -33,7 +34,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
         const result = await checkDeliveryAvailability(body.client_phone);
         return result;
       } catch (error) {
-        console.error("❌ Ошибка в endpoint /delivery/check:", error);
+        logger.error("❌ Ошибка в endpoint /delivery/check:", error);
         throw error;
       }
     },
@@ -77,15 +78,15 @@ export const delivery = new Elysia({ prefix: "/v1" })
         const expectedKey = ozonConfig.tildaWebhookApiKey;
 
         if (expectedKey && apiKey !== expectedKey) {
-          console.warn(`⚠️  /order/webhook — неверный API-ключ от ${sourceIp}`);
+          logger.warn(`⚠️  /order/webhook — неверный API-ключ от ${sourceIp}`);
           // Всегда 200 для Тильды — иначе она блочит webhook
           return { success: false, error: "Invalid API key" };
         }
 
-        console.log("🛒 Получен запрос на создание заказа /order/create");
-        console.log(`   Source IP: ${sourceIp}`);
-        console.log(`   Origin: ${origin}`);
-        console.log(`   Referer: ${referer}`);
+        logger.log("🛒 Получен запрос на создание заказа /order/create");
+        logger.log(`   Source IP: ${sourceIp}`);
+        logger.log(`   Origin: ${origin}`);
+        logger.log(`   Referer: ${referer}`);
 
         // Тестовый запрос от Тильды при проверке URL — нет данных заказа
         if (
@@ -94,32 +95,23 @@ export const delivery = new Elysia({ prefix: "/v1" })
           !(body as any).payment ||
           !(body as any).payment?.orderid
         ) {
-          console.log(
+          logger.log(
             "ℹ️  Тестовый запрос (нет payment.orderid) — отвечаем 200",
           );
-          console.log("   Body:", JSON.stringify(body));
           return { success: true, message: "Webhook endpoint is active" };
         }
 
-        // Логируем webhook
+        // Логируем webhook (без sensitive данных)
         const LOG_DIR = join(__dirname, "..", "..", "cache");
         if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
         const file = join(LOG_DIR, "order-create.log");
+        const payment = (body as any)?.payment;
         const entry = JSON.stringify({
           received_at: new Date().toISOString(),
           source_ip: sourceIp,
-          origin,
-          referer,
-          user_agent: userAgent,
-          api_key_valid: !expectedKey || apiKey === expectedKey,
-          headers: Object.fromEntries(
-            [...request.headers.entries()].filter(
-              ([k]) =>
-                !k.toLowerCase().includes("authorization") &&
-                !k.toLowerCase().includes("cookie"),
-            ),
-          ),
-          body,
+          order_id: payment?.orderid,
+          delivery: payment?.delivery,
+          products_count: payment?.products?.length,
         });
         appendFileSync(file, entry + "\n", "utf-8");
 
@@ -143,7 +135,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
           postings: result.postings,
         };
       } catch (error) {
-        console.error("❌ Ошибка в /order/webhook:", error);
+        logger.error("❌ Ошибка в /order/webhook:", error);
         // Всегда 200 для Тильды — иначе она блочит webhook
         return {
           success: false,
@@ -170,7 +162,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
           ...result,
         };
       } catch (error) {
-        console.error("❌ Ошибка в endpoint /delivery/pvz:", error);
+        logger.error("❌ Ошибка в endpoint /delivery/pvz:", error);
         throw error;
       }
     },
@@ -191,7 +183,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
         pvz,
       };
     } catch (error) {
-      console.error("❌ Ошибка в endpoint /delivery/pvz/all:", error);
+      logger.error("❌ Ошибка в endpoint /delivery/pvz/all:", error);
       throw error;
     }
   })
@@ -211,7 +203,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
         }
         return { success: true, lat: result.lat, lon: result.lon };
       } catch (error) {
-        console.error("❌ Ошибка в endpoint /delivery/geocode:", error);
+        logger.error("❌ Ошибка в endpoint /delivery/geocode:", error);
         return { success: false, error: "Ошибка геокодирования" };
       }
     },
@@ -225,7 +217,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
     "/delivery/price",
     async ({ body, set }) => {
       try {
-        console.log(
+        logger.log(
           `🔄 Получение цены доставки для точки ${body.mapPointId}...`,
         );
 
@@ -240,7 +232,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
           ...result,
         };
       } catch (error) {
-        console.error("❌ Ошибка в endpoint /delivery/price:", error);
+        logger.error("❌ Ошибка в endpoint /delivery/price:", error);
         set.status = 500;
         return {
           success: false,
@@ -266,7 +258,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
     "/delivery/courier/price",
     async ({ body, set }) => {
       try {
-        console.log(
+        logger.log(
           `🔄 Получение цены курьерской доставки (${body.latitude}, ${body.longitude})...`,
         );
 
@@ -282,7 +274,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
           ...result,
         };
       } catch (error) {
-        console.error("❌ Ошибка в endpoint /delivery/courier/price:", error);
+        logger.error("❌ Ошибка в endpoint /delivery/courier/price:", error);
         set.status = 500;
         return {
           success: false,
@@ -338,7 +330,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
         const points = getTildaPickupPointsByIds(allIds);
         return points;
       } catch (error) {
-        console.error("❌ Ошибка проксирования /delivery/map:", error);
+        logger.error("❌ Ошибка проксирования /delivery/map:", error);
         // Fallback на локальную БД при ошибке Ozon API
         const points = getTildaPickupPointsByViewport({
           latMin: viewport.left_bottom.lat,
@@ -384,7 +376,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
           );
         }
 
-        console.log(
+        logger.log(
           `✅ SKU mapping: добавлено/обновлено ${body.mappings.length} записей`,
         );
 
@@ -393,7 +385,7 @@ export const delivery = new Elysia({ prefix: "/v1" })
           count: body.mappings.length,
         };
       } catch (error) {
-        console.error("❌ Ошибка в /admin/sku-mapping:", error);
+        logger.error("❌ Ошибка в /admin/sku-mapping:", error);
         set.status = 500;
         return {
           success: false,

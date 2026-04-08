@@ -1,4 +1,5 @@
 import cron, { type ScheduledTask } from "node-cron";
+import * as logger from "../utils/logger";
 import {
   getPickupPointsList,
   getPickupPointsInfo,
@@ -98,7 +99,7 @@ function insertPoint(point: PickupPointInfoItem): void {
  */
 function savePointsToDb(points: PickupPointInfoItem[]): void {
   const total = points.length;
-  console.log(`💾 Сохранение ${total} точек в SQLite...`);
+  logger.log(`💾 Сохранение ${total} точек в SQLite...`);
 
   const insertMany = db.transaction((items: PickupPointInfoItem[]) => {
     for (const point of items) {
@@ -107,7 +108,7 @@ function savePointsToDb(points: PickupPointInfoItem[]): void {
   });
 
   insertMany(points);
-  console.log(`✅ Сохранено ${total} точек в SQLite`);
+  logger.log(`✅ Сохранено ${total} точек в SQLite`);
 }
 
 /**
@@ -119,7 +120,7 @@ async function fetchAllPointsInfo(points: PickupPointItem[]): Promise<void> {
   const batches = Math.ceil(totalPoints / BATCH_SIZE);
   let totalSaved = 0;
 
-  console.log(`� Начат сбор точек самовывоза: ${totalPoints} точек...`);
+  logger.log(`� Начат сбор точек самовывоза: ${totalPoints} точек...`);
 
   for (let i = 0; i < batches; i++) {
     const start = i * BATCH_SIZE;
@@ -146,11 +147,11 @@ async function fetchAllPointsInfo(points: PickupPointItem[]): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
     } catch (error) {
-      console.error(`❌ Ошибка пачки ${i + 1}/${batches}:`, error);
+      logger.error(`❌ Ошибка пачки ${i + 1}/${batches}:`, error);
     }
   }
 
-  console.log(
+  logger.log(
     `✅ Сбор окончен: сохранено ${totalSaved} из ${totalPoints} точек`,
   );
 }
@@ -393,12 +394,12 @@ export function getTildaPickupPointsByIds(
  * Перестройка FTS индекса из существующих данных
  */
 export function rebuildFts(): void {
-  console.log("🔄 Перестройка FTS индекса...");
+  logger.log("🔄 Перестройка FTS индекса...");
   db.run(`
     INSERT INTO pickup_points_fts(pickup_points_fts)
     VALUES ('rebuild')
   `);
-  console.log("✅ FTS индекс перестроен");
+  logger.log("✅ FTS индекс перестроен");
 }
 
 /**
@@ -406,13 +407,13 @@ export function rebuildFts(): void {
  */
 export async function initializePickupPointsCache(): Promise<void> {
   if (!ozonConfig.isConfigured) {
-    console.warn(
+    logger.warn(
       "⚠️  Кэш точек самовывоза не инициализирован: конфигурация не завершена",
     );
     return;
   }
 
-  console.log("🚀 Инициализация кэша точек самовывоза...");
+  logger.log("🚀 Инициализация кэша точек самовывоза...");
 
   // Проверяем что уже есть в базе
   const existingCount = (countStmt.get() as { count: number }).count;
@@ -420,7 +421,7 @@ export async function initializePickupPointsCache(): Promise<void> {
     .last_update;
 
   if (existingCount > 0) {
-    console.log(
+    logger.log(
       `📂 В базе ${existingCount} точек (обновлено: ${lastUpdate || "неизвестно"})`,
     );
 
@@ -429,18 +430,18 @@ export async function initializePickupPointsCache(): Promise<void> {
       const lastUpdateTime = new Date(lastUpdate + "Z").getTime();
       const hoursAgo = (Date.now() - lastUpdateTime) / (1000 * 60 * 60);
       if (hoursAgo < 24) {
-        console.log(
+        logger.log(
           `✅ Данные свежие (${hoursAgo.toFixed(1)}ч назад) — пропускаем загрузку из API`,
         );
         scheduleDailyUpdate();
         return;
       }
-      console.log(
+      logger.log(
         `⏰ Данные устарели (${hoursAgo.toFixed(1)}ч назад) — обновляем из API`,
       );
     }
   } else {
-    console.log("📂 База пуста, будет выполнен запрос к API");
+    logger.log("📂 База пуста, будет выполнен запрос к API");
   }
 
   // Запускаем ежедневное обновление
@@ -448,19 +449,19 @@ export async function initializePickupPointsCache(): Promise<void> {
 
   // Пытаемся обновить из API
   try {
-    console.log("📍 Шаг 1: Получение базового списка точек...");
+    logger.log("📍 Шаг 1: Получение базового списка точек...");
     const listResponse = await getPickupPointsList();
 
-    console.log("📍 Шаг 2: Получение и сохранение детальной информации...");
+    logger.log("📍 Шаг 2: Получение и сохранение детальной информации...");
     await fetchAllPointsInfo(listResponse.points);
     rebuildFts();
-    console.log("✅ Кэш точек самовывоза успешно обновлён из API");
+    logger.log("✅ Кэш точек самовывоза успешно обновлён из API");
   } catch (error) {
-    console.error("❌ Ошибка обновления кэша из API:", error);
+    logger.error("❌ Ошибка обновления кэша из API:", error);
     if (existingCount > 0) {
-      console.log("⚠️  Используем данные из базы как fallback");
+      logger.log("⚠️  Используем данные из базы как fallback");
     } else {
-      console.warn(
+      logger.warn(
         "⚠️  База пуста и нет доступа к API. Данные загрузятся после авторизации",
       );
     }
@@ -472,19 +473,19 @@ export async function initializePickupPointsCache(): Promise<void> {
  */
 export async function refreshPickupPointsCache(): Promise<void> {
   if (!ozonConfig.isConfigured) {
-    console.warn("⚠️  Обновление кэша пропущено: конфигурация не завершена");
+    logger.warn("⚠️  Обновление кэша пропущено: конфигурация не завершена");
     return;
   }
 
-  console.log("🔄 Обновление кэша точек самывоза...");
+  logger.log("🔄 Обновление кэша точек самывоза...");
 
   try {
     const listResponse = await getPickupPointsList();
     await fetchAllPointsInfo(listResponse.points);
     rebuildFts();
-    console.log("✅ Кэш точек самовывоза успешно обновлён");
+    logger.log("✅ Кэш точек самовывоза успешно обновлён");
   } catch (error) {
-    console.error("❌ Ошибка обновления кэша:", error);
+    logger.error("❌ Ошибка обновления кэша:", error);
   }
 }
 
@@ -499,11 +500,11 @@ function scheduleDailyUpdate(): void {
 
   cronTask = cron.schedule(`0 ${UPDATE_HOUR} * * *`, () => {
     refreshPickupPointsCache().catch((error) => {
-      console.error("❌ Ошибка ежедневного обновления кэша:", error);
+      logger.error("❌ Ошибка ежедневного обновления кэша:", error);
     });
   });
 
-  console.log(
+  logger.log(
     `⏰ Ежедневное обновление кэша ПВЗ запланировано на ${UPDATE_HOUR}:00`,
   );
 }
@@ -532,6 +533,6 @@ export function stopDailyUpdate(): void {
   if (cronTask) {
     cronTask.stop();
     cronTask = null;
-    console.log("⏹️ Автоматическое обновление кэша остановлено");
+    logger.log("⏹️ Автоматическое обновление кэша остановлено");
   }
 }

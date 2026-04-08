@@ -1,7 +1,8 @@
 import nodemailer from "nodemailer";
 import { ozonConfig } from "../config/env";
+import * as logger from "./logger";
 
-const AUTH_LINK = "https://orderinme.fvds.ru/auth/url";
+const AUTH_LINK = `${process.env.SERVER_DOMEN || "https://orderinme.fvds.ru"}/auth/url`;
 
 // Дебаунс — не шлём чаще чем раз в 5 минут
 let lastSentAt = 0;
@@ -60,18 +61,18 @@ export async function sendAuthRequiredEmail(
   const to = ozonConfig.notifyEmail;
 
   if (!to) {
-    console.warn("⚠️  NOTIFY_EMAIL не задан — письмо не отправлено");
-    console.warn(`   Тема: ${subject}`);
-    console.warn(`   Ссылка для авторизации: ${AUTH_LINK}`);
+    logger.warn("⚠️  NOTIFY_EMAIL не задан — письмо не отправлено");
+    logger.warn(`   Тема: ${subject}`);
+    logger.warn(`   Ссылка для авторизации: ${AUTH_LINK}`);
     return;
   }
 
   const transport = createTransport();
   if (!transport) {
-    console.warn("⚠️  SMTP не настроен — письмо не отправлено");
-    console.warn(`   Тема: ${subject}`);
-    console.warn(`   Кому: ${to}`);
-    console.warn(`   Ссылка для авторизации: ${AUTH_LINK}`);
+    logger.warn("⚠️  SMTP не настроен — письмо не отправлено");
+    logger.warn(`   Тема: ${subject}`);
+    logger.warn(`   Кому: ${to}`);
+    logger.warn(`   Ссылка для авторизации: ${AUTH_LINK}`);
     return;
   }
 
@@ -82,9 +83,9 @@ export async function sendAuthRequiredEmail(
       subject,
       html,
     });
-    console.log(`✅ Письмо отправлено на ${to}`);
+    logger.log(`✅ Письмо отправлено на ${to}`);
   } catch (error) {
-    console.error("❌ Ошибка отправки письма:", error);
+    logger.error("❌ Ошибка отправки письма:", error);
   }
 }
 
@@ -153,20 +154,18 @@ export async function sendOrderErrorEmail(
   const to = ozonConfig.notifyEmail;
 
   if (!to) {
-    console.warn(
+    logger.warn(
       "⚠️  NOTIFY_EMAIL не задан — письмо об ошибке заказа не отправлено",
     );
-    console.warn(`   Тема: ${subject}`);
+    logger.warn(`   Тема: ${subject}`);
     return;
   }
 
   const transport = createTransport();
   if (!transport) {
-    console.warn(
-      "⚠️  SMTP не настроен — письмо об ошибке заказа не отправлено",
-    );
-    console.warn(`   Тема: ${subject}`);
-    console.warn(`   Кому: ${to}`);
+    logger.warn("⚠️  SMTP не настроен — письмо об ошибке заказа не отправлено");
+    logger.warn(`   Тема: ${subject}`);
+    logger.warn(`   Кому: ${to}`);
     return;
   }
 
@@ -177,9 +176,9 @@ export async function sendOrderErrorEmail(
       subject,
       html,
     });
-    console.log(`✅ Письмо об ошибке заказа отправлено на ${to}`);
+    logger.log(`✅ Письмо об ошибке заказа отправлено на ${to}`);
   } catch (error) {
-    console.error("❌ Ошибка отправки письма об ошибке заказа:", error);
+    logger.error("❌ Ошибка отправки письма об ошибке заказа:", error);
   }
 }
 
@@ -229,17 +228,15 @@ export async function sendCriticalErrorEmail(
   const to = ozonConfig.notifyEmail;
 
   if (!to) {
-    console.warn(
-      "⚠️  NOTIFY_EMAIL не задан — критическое письмо не отправлено",
-    );
-    console.warn(`   Тема: ${subject}`);
+    logger.warn("⚠️  NOTIFY_EMAIL не задан — критическое письмо не отправлено");
+    logger.warn(`   Тема: ${subject}`);
     return;
   }
 
   const transport = createTransport();
   if (!transport) {
-    console.warn("⚠️  SMTP не настроен — критическое письмо не отправлено");
-    console.warn(`   Тема: ${subject}`);
+    logger.warn("⚠️  SMTP не настроен — критическое письмо не отправлено");
+    logger.warn(`   Тема: ${subject}`);
     return;
   }
 
@@ -250,9 +247,9 @@ export async function sendCriticalErrorEmail(
       subject,
       html,
     });
-    console.log(`✅ Критическое письмо отправлено на ${to}`);
+    logger.log(`✅ Критическое письмо отправлено на ${to}`);
   } catch (error) {
-    console.error("❌ Ошибка отправки критического письма:", error);
+    logger.error("❌ Ошибка отправки критического письма:", error);
   }
 }
 

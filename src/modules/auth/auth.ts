@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import * as logger from "../../utils/logger";
 import {
   getAuthUrl,
   fetchAccessToken,
@@ -46,17 +47,13 @@ export const auth = new Elysia({ prefix: "/auth" })
     async ({ query }) => {
       const { code, state, error: oauthError, error_description } = query;
 
-      console.log("========================================");
-      console.log("📥 OAuth Callback получен:");
-      console.log(`   Code: ${code ? "получен" : "отсутствует"}`);
-      console.log(`   State: ${state || "отсутствует"}`);
-      console.log(`   Error: ${oauthError || "нет"}`);
-      console.log(`   Error description: ${error_description || "нет"}`);
-      console.log("========================================");
+      logger.log(
+        `📥 OAuth Callback: code=${code ? "✓" : "✗"}, state=${state ? "✓" : "✗"}, error=${oauthError || "нет"}`,
+      );
 
       // Проверяем state для защиты от CSRF атак
       if (!state || !validateState(state)) {
-        console.error("❌ Невалидный state - возможна CSRF атака");
+        logger.error("❌ Невалидный state - возможна CSRF атака");
         const html = generateErrorHTML(
           "Невалидный state параметр - возможна CSRF атака",
         );
@@ -65,7 +62,7 @@ export const auth = new Elysia({ prefix: "/auth" })
 
       // Check for OAuth errors
       if (oauthError) {
-        console.error("❌ OAuth ошибка:", oauthError, error_description);
+        logger.error("❌ OAuth ошибка:", oauthError, error_description);
         return {
           success: false,
           error: oauthError,
@@ -75,7 +72,7 @@ export const auth = new Elysia({ prefix: "/auth" })
 
       // Validate code
       if (!code) {
-        console.error("❌ Отсутствует параметр code");
+        logger.error("❌ Отсутствует параметр code");
         return {
           success: false,
           error: "Отсутствует параметр code",
@@ -83,32 +80,30 @@ export const auth = new Elysia({ prefix: "/auth" })
       }
 
       try {
-        console.log("🔄 Обмен code на токен...");
+        logger.log("🔄 Обмен code на токен...");
         // Exchange code for token
         const tokenData = await fetchAccessToken("authorization_code", code);
 
-        console.log("✅ Токен успешно получен");
-        console.log(
-          `   Expires in: ${tokenData.expires_in - Date.now() / 1000} секунд`,
+        logger.log(
+          `✅ Токен получен (expires: ${Math.round((tokenData.expires_in - Date.now() / 1000) / 60)} мин, scope: ${tokenData.scope.join(", ")})`,
         );
-        console.log(`   Scope: ${tokenData.scope.join(", ")}`);
 
         // Запускаем обновление кэша ПВЗ в фоне после получения токена
         refreshPickupPointsCache().catch((err) => {
-          console.error("❌ Ошибка обновления кэша ПВЗ после логина:", err);
+          logger.error("❌ Ошибка обновления кэша ПВЗ после логина:", err);
         });
 
         // Воспроизводим очередь запросов, накопленную за время без токена
         replayQueue()
           .then((result) => {
             if (result.total > 0) {
-              console.log(
+              logger.log(
                 `📋 Очередь: ${result.success}/${result.total} успешно`,
               );
             }
           })
           .catch((err) => {
-            console.error("❌ Ошибка воспроизведения очереди:", err);
+            logger.error("❌ Ошибка воспроизведения очереди:", err);
           });
 
         // Return HTML response for browser
@@ -118,7 +113,7 @@ export const auth = new Elysia({ prefix: "/auth" })
         });
         return createHTMLResponse(html);
       } catch (error) {
-        console.error("❌ Ошибка получения токена:", error);
+        logger.error("❌ Ошибка получения токена:", error);
 
         // Return HTML error response
         const errorMessage =
