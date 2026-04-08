@@ -4,7 +4,7 @@ import * as logger from "./logger";
 // 10 запросов/секунду, очередь до 1000
 const limiter = new Bottleneck({
   minTime: Math.ceil(1000 / 10),
-  maxConcurrent: 10,
+  maxConcurrent: 30,
   highWater: 1000,
   strategy: Bottleneck.strategy.OVERFLOW,
 });

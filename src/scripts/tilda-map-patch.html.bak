@@ -715,133 +715,19 @@
           }
         }, 1000);
 
-        console.log(
-          "[OzonPatch] V5 — ПВЗ + курьер + блокировка + cart observer ✓",
-        );
+        console.log("[OzonPatch] V4 — ПВЗ + курьер + блокировка кнопки ✓");
 
         // ==============================================
-        // 6. CART POLLING — агрессивная проверка корзины каждую секунду
-        // Если товар добавлен/удалён/изменено количество — сброс и перезапрос price
-        // Если checkout не пройден — повторяем запрос пока не пройдёт или корзина пуста
-        // ==============================================
-        let cartSnapshotJson = JSON.stringify(getCartItems());
-        let checkoutInFlight = false;
-
-        setInterval(() => {
-          const items = getCartItems();
-          const newSnapshot = JSON.stringify(items);
-          const cartChanged = newSnapshot !== cartSnapshotJson;
-
-          if (cartChanged) {
-            cartSnapshotJson = newSnapshot;
-            console.log("[OzonPatch] Корзина изменилась, сброс checkout");
-            ozonState.checkoutPassed = false;
-            updatePurchaseButton();
-          }
-
-          // Если корзина пуста — нечего проверять
-          if (items.length === 0) return;
-
-          // Если телефон не проверен, но введён — перезапускаем проверку
-          if (!ozonState.phoneChecked && ozonState.phoneValid) {
-            lastCheckedPhone = "";
-            handlePhoneChange();
-            return;
-          }
-
-          // Если checkout не пройден и доставка выбрана и телефон ок — перезапускаем
-          if (
-            !ozonState.checkoutPassed &&
-            ozonState.phoneChecked &&
-            ozonState.deliverySelected &&
-            !checkoutInFlight
-          ) {
-            console.log("[OzonPatch] Polling: checkout не пройден, перезапуск");
-            checkoutInFlight = true;
-            const done = () => {
-              checkoutInFlight = false;
-            };
-            // Обёртка rerunCheckout с отслеживанием завершения
-            if (ozonState.deliveryType === "pickup") {
-              const mapPointId = document.querySelector(
-                '.t706 [name="ozon_map_point_id"]',
-              )?.value;
-              if (mapPointId) {
-                updateOzonPrice(OZON_PICKUP_ID, mapPointId).finally(done);
-              } else {
-                done();
-              }
-            } else if (ozonState.deliveryType === "courier") {
-              const lat = document.querySelector(
-                '.t706 [name="ozon_courier_lat"]',
-              )?.value;
-              const lon = document.querySelector(
-                '.t706 [name="ozon_courier_lon"]',
-              )?.value;
-              if (lat && lon) {
-                updateCourierPrice(
-                  OZON_COURIER_ID,
-                  parseFloat(lat),
-                  parseFloat(lon),
-                ).finally(done);
-              } else {
-                done();
-              }
-            } else {
-              done();
-            }
-          }
-        }, 1000);
-
-        // ==============================================
-        // 7. КУРЬЕРСКАЯ ДОСТАВКА
+        // 6. КУРЬЕРСКАЯ ДОСТАВКА
         // При выборе курьерской службы и вводе адреса → геокодинг → цена
         // ==============================================
 
         // Отслеживаем переключение на курьерскую доставку
         function watchCourierAddress() {
-          // Собирает полный адрес из полей Тильды
-          function collectCourierAddress() {
-            const city =
-              document.querySelector('input[name="tildadelivery-city"]')
-                ?.value || "";
-            const street =
-              document.querySelector('input[name="tildadelivery-street"]')
-                ?.value || "";
-            const house =
-              document.querySelector('input[name="tildadelivery-house"]')
-                ?.value || "";
-            const addr =
-              document.querySelector('input[name="tildadelivery-address"]')
-                ?.value ||
-              document.querySelector('input[name="delivery_address"]')?.value ||
-              "";
-            return addr || [city, street, house].filter(Boolean).join(", ");
-          }
-
-          function triggerCourierGeocode() {
-            const activeService = delivery.deliveryState.selectedService;
-            if (activeService !== OZON_COURIER_ID) return;
-            clearTimeout(courierDebounce);
-            courierDebounce = setTimeout(() => {
-              const fullAddress = collectCourierAddress();
-              if (fullAddress.length >= 5) {
-                console.log(
-                  "[OzonPatch] Courier geocode trigger:",
-                  fullAddress,
-                );
-                geocodeAndUpdateCourier(fullAddress);
-              }
-            }, 800);
-          }
-
           // Слушаем изменения в полях адреса курьерской доставки
           const addressSelectors = [
             'input[name="tildadelivery-address"]',
             'input[name="delivery_address"]',
-            'input[name="tildadelivery-city"]',
-            'input[name="tildadelivery-street"]',
-            'input[name="tildadelivery-house"]',
             ".t-input-group_da input",
           ];
 
@@ -851,78 +737,45 @@
               if (input.dataset.ozonCourierBound) return;
               input.dataset.ozonCourierBound = "1";
 
-              // blur — основной триггер
-              input.addEventListener("blur", triggerCourierGeocode);
+              // При потере фокуса — геокодим полный адрес
+              input.addEventListener("blur", () => {
+                const activeService = delivery.deliveryState.selectedService;
+                if (activeService !== OZON_COURIER_ID) return;
 
-              // input с дебаунсом — ловим ввод и программные изменения
-              input.addEventListener("input", triggerCourierGeocode);
+                clearTimeout(courierDebounce);
+                courierDebounce = setTimeout(() => {
+                  // Собираем полный адрес из полей Тильды
+                  const city =
+                    document.querySelector('input[name="tildadelivery-city"]')
+                      ?.value || "";
+                  const street =
+                    document.querySelector('input[name="tildadelivery-street"]')
+                      ?.value || "";
+                  const house =
+                    document.querySelector('input[name="tildadelivery-house"]')
+                      ?.value || "";
+                  const fullAddress =
+                    input.value ||
+                    [city, street, house].filter(Boolean).join(", ");
 
-              // change — ловим autocomplete и программные setValue
-              input.addEventListener("change", triggerCourierGeocode);
+                  if (fullAddress.length >= 5) {
+                    geocodeAndUpdateCourier(fullAddress);
+                  }
+                }, 500);
+              });
             });
           }
         }
 
-        // Делегированный обработчик на body — ловит ввод в адресные поля
-        // даже если они ещё не существовали при инициализации
-        document.body.addEventListener(
-          "input",
-          (e) => {
-            const el = e.target;
-            if (
-              el.name === "tildadelivery-address" ||
-              el.name === "delivery_address" ||
-              el.name === "tildadelivery-city" ||
-              el.name === "tildadelivery-street" ||
-              el.name === "tildadelivery-house"
-            ) {
-              const activeService = delivery.deliveryState.selectedService;
-              if (activeService === OZON_COURIER_ID) {
-                clearTimeout(courierDebounce);
-                courierDebounce = setTimeout(() => {
-                  watchCourierAddress(); // биндим если ещё не привязаны
-                  const fullAddress = (function () {
-                    const city =
-                      document.querySelector('input[name="tildadelivery-city"]')
-                        ?.value || "";
-                    const street =
-                      document.querySelector(
-                        'input[name="tildadelivery-street"]',
-                      )?.value || "";
-                    const house =
-                      document.querySelector(
-                        'input[name="tildadelivery-house"]',
-                      )?.value || "";
-                    const addr =
-                      document.querySelector(
-                        'input[name="tildadelivery-address"]',
-                      )?.value ||
-                      document.querySelector('input[name="delivery_address"]')
-                        ?.value ||
-                      "";
-                    return (
-                      addr || [city, street, house].filter(Boolean).join(", ")
-                    );
-                  })();
-                  if (fullAddress.length >= 5) {
-                    geocodeAndUpdateCourier(fullAddress);
-                  }
-                }, 1200);
-              }
-            }
-          },
-          true,
-        );
-
         // Отслеживаем переключение типа доставки (radio кнопки)
-        const courierDomObserver = new MutationObserver(() => {
+        const observer = new MutationObserver(() => {
           watchCourierAddress();
         });
         const cartContainer =
           document.querySelector(".t706") ||
           document.querySelector(".t-store__cart");
         if (cartContainer) {
-          courierDomObserver.observe(cartContainer, {
+          observer.observe(cartContainer, {
             childList: true,
             subtree: true,
           });
@@ -940,48 +793,13 @@
               setHiddenInput("ozon_map_point_id", "");
               ozonState.deliverySelected = false;
               ozonState.deliveryType = "courier";
-              ozonState.checkoutPassed = false;
               updatePurchaseButton();
-
-              // Биндим поля + пробуем геокодить уже введённый адрес
-              setTimeout(() => {
-                watchCourierAddress();
-                const fullAddress = (function () {
-                  const city =
-                    document.querySelector('input[name="tildadelivery-city"]')
-                      ?.value || "";
-                  const street =
-                    document.querySelector('input[name="tildadelivery-street"]')
-                      ?.value || "";
-                  const house =
-                    document.querySelector('input[name="tildadelivery-house"]')
-                      ?.value || "";
-                  const addr =
-                    document.querySelector(
-                      'input[name="tildadelivery-address"]',
-                    )?.value ||
-                    document.querySelector('input[name="delivery_address"]')
-                      ?.value ||
-                    "";
-                  return (
-                    addr || [city, street, house].filter(Boolean).join(", ")
-                  );
-                })();
-                if (fullAddress.length >= 5) {
-                  geocodeAndUpdateCourier(fullAddress);
-                }
-              }, 300);
-
-              // Если телефон не проверен — запускаем проверку
-              if (!ozonState.phoneChecked && ozonState.phoneValid) {
-                lastCheckedPhone = "";
-                handlePhoneChange();
-              }
+              // Попробовать геокодить уже введённый адрес
+              setTimeout(() => watchCourierAddress(), 300);
             } else {
               // Переключились на ПВЗ — сбрасываем выбор
               ozonState.deliverySelected = false;
               ozonState.deliveryType = null;
-              ozonState.checkoutPassed = false;
               updatePurchaseButton();
             }
           };
