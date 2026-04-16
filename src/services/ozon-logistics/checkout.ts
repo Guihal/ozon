@@ -1,6 +1,18 @@
 import { queuedOzonRequest } from "../../utils/requestQueue";
 import * as logger from "../../utils/logger";
 
+/**
+ * Бизнес-ошибка: доставка недоступна
+ */
+export class DeliveryUnavailableError extends Error {
+  reasons: string[];
+  constructor(message: string, reasons: string[] = []) {
+    super(message);
+    this.name = "DeliveryUnavailableError";
+    this.reasons = reasons;
+  }
+}
+
 export interface DeliveryPriceRequest {
   mapPointId: number;
   items: { sku: number; quantity: number; offer_id: string }[];
@@ -81,29 +93,7 @@ export async function getDeliveryPrice(
 
     const data = result.data as any;
 
-    // Берём первый доступный сплит
-    const split = data.splits?.find(
-      (s: any) => s.unavailable_reason === "UNSPECIFIED",
-    );
-
-    if (!split) {
-      logger.error("❌ Доставка недоступна для этой точки");
-      throw new Error("Доставка недоступна для этой точки");
-    }
-
-    const timeslot = split.delivery_method?.timeslots?.[0];
-
-    const dateFrom =
-      timeslot?.logistic_date_range?.from || timeslot?.client_date_range?.from;
-    const dateTo =
-      timeslot?.logistic_date_range?.to || timeslot?.client_date_range?.to;
-
-    const priceResult = {
-      price: 0, // /v2/checkout не возвращает цену — нужен /v2/order/create
-      currency: "RUB",
-      daysMin: dateFrom ? daysBetween(new Date(), new Date(dateFrom)) : 0,
-      daysMax: dateTo ? daysBetween(new Date(), new Date(dateTo)) : 0,
-    };
+    const priceResult = extractDeliveryResult(data);
 
     logger.log(
       `✅ Цена доставки получена: ${priceResult.daysMin}-${priceResult.daysMax} дней`,
@@ -145,15 +135,33 @@ function buildCheckoutItems(
  * Извлекает сроки доставки из splits ответа checkout
  */
 function extractDeliveryResult(data: any): DeliveryPriceResult {
-  const split = data.splits?.find(
+  const splits = data.splits || [];
+  const availableSplit = splits.find(
     (s: any) => s.unavailable_reason === "UNSPECIFIED",
   );
 
-  if (!split) {
-    throw new Error("Доставка недоступна");
+  if (!availableSplit) {
+    // Собираем причины недоступности для понятного сообщения
+    const reasons = splits
+      .filter(
+        (s: any) =>
+          s.unavailable_reason && s.unavailable_reason !== "UNSPECIFIED",
+      )
+      .map((s: any) => s.unavailable_reason);
+    const uniqueReasons = [...new Set(reasons)];
+    const reasonMsg =
+      uniqueReasons.length > 0 ? `Причина: ${uniqueReasons.join(", ")}` : "";
+    logger.warn(
+      `⚠️ Доставка недоступна. ${reasonMsg}. Splits:`,
+      JSON.stringify(splits),
+    );
+    throw new DeliveryUnavailableError(
+      `Доставка недоступна для выбранных товаров`,
+      uniqueReasons,
+    );
   }
 
-  const timeslot = split.delivery_method?.timeslots?.[0];
+  const timeslot = availableSplit.delivery_method?.timeslots?.[0];
   const dateFrom =
     timeslot?.logistic_date_range?.from || timeslot?.client_date_range?.from;
   const dateTo =

@@ -7,6 +7,7 @@ import {
 import {
   getDeliveryPrice,
   getCourierDeliveryPrice,
+  DeliveryUnavailableError,
 } from "../../services/ozon-logistics/checkout";
 import { createOzonOrder } from "../../services/ozon-logistics/order";
 import { geocodeAddress } from "../../utils/geocode";
@@ -232,6 +233,13 @@ export const delivery = new Elysia({ prefix: "/v1" })
           ...result,
         };
       } catch (error) {
+        if (error instanceof DeliveryUnavailableError) {
+          return {
+            success: false,
+            error: error.message,
+            reasons: error.reasons,
+          };
+        }
         logger.error("❌ Ошибка в endpoint /delivery/price:", error);
         set.status = 500;
         return {
@@ -274,6 +282,13 @@ export const delivery = new Elysia({ prefix: "/v1" })
           ...result,
         };
       } catch (error) {
+        if (error instanceof DeliveryUnavailableError) {
+          return {
+            success: false,
+            error: error.message,
+            reasons: error.reasons,
+          };
+        }
         logger.error("❌ Ошибка в endpoint /delivery/courier/price:", error);
         set.status = 500;
         return {
